@@ -210,13 +210,45 @@ bar along the top shows **icons as well as numbers**.
 
 ### The bar shows bare numbers with no icons
 
-The emoji font did not install. Every module still prints its value but the
-icon is dropped, so it looks like broken scripts when it is a missing font.
+You are missing the **black-and-white** emoji font. This one is subtle and worth
+understanding, because installing the obvious package does not fix it.
+
+dwm's `drw.c`, in the code path that looks for a fallback font when a glyph is
+missing from the primary font, contains:
+
+```c
+FcPatternAddBool(fcpattern, FC_COLOR, FcFalse);
+```
+
+That tells fontconfig *not to return a colour font*. Every status bar icon is an
+emoji, and `google-noto-color-emoji-fonts` is a colour font, so dwm rejects it
+and draws nothing — while the numbers, which live in the monospace font, render
+normally. The result looks like broken scripts and is actually a font policy.
+
+The fix is the monochrome font:
 
 ```sh
-sudo dnf install -y google-noto-color-emoji-fonts fontawesome-fonts-all
+sudo dnf install -y google-noto-emoji-fonts
 fc-cache -f
 pkill -HUP dwm
+```
+
+`progs.csv` installs it, so a fresh install should not hit this.
+
+To confirm the diagnosis first, print an emoji **inside st**:
+
+```sh
+printf '🧠 🔻 🔊 📦\n'
+```
+
+If they appear in the terminal but not in the bar, it is exactly this — st and
+dwm have different font-fallback rules. If they appear in neither, then the
+fonts really are missing:
+
+```sh
+fc-list | grep -iE 'NotoEmoji|NotoColorEmoji|awesome'
+sudo dnf install -y google-noto-emoji-fonts google-noto-color-emoji-fonts fontawesome-fonts-all
+fc-cache -f && pkill -HUP dwm
 ```
 
 ### Grey screen, no keybindings work

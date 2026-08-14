@@ -453,13 +453,20 @@ enablerpmfusion() {
 	logmsg "rpmfusion"
 	freeurl="https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$fedver.noarch.rpm"
 	nonfreeurl="https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$fedver.noarch.rpm"
-	curl -sfI "$freeurl" >/dev/null 2>&1 ||
-		error "RPM Fusion has no release package for Fedora $fedver yet ($freeurl). Wait for it, or install on the previous release."
+	# Deliberately NOT fatal. A third-party mirror being down must not strand
+	# someone part-way through installing a machine that has no other OS on it.
+	# The cost of skipping is limited codec support, which is recoverable later.
+	curl -sfI "$freeurl" >/dev/null 2>&1 || {
+		notework "RPM Fusion (no release package for Fedora $fedver yet; full ffmpeg codecs unavailable)"
+		return 1
+	}
 	# --nogpgcheck: the RPM Fusion signing key is not trusted until the release
 	# package that ships it is installed. This is the documented bootstrap, and
 	# it is an explicit trust decision -- see RUNBOOK.md.
-	dnf -y install --nogpgcheck "$freeurl" "$nonfreeurl" >>"$logfile" 2>&1 ||
-		error "Could not enable RPM Fusion."
+	dnf -y install --nogpgcheck "$freeurl" "$nonfreeurl" >>"$logfile" 2>&1 || {
+		notework "RPM Fusion (could not enable; full ffmpeg codecs unavailable)"
+		return 1
+	}
 }
 
 # Fedora ships ffmpeg-free, which has no H.264/H.265/AAC encoders. Swapped here,
@@ -477,12 +484,21 @@ enablelibrewolfrepo() {
 	[ -f /etc/yum.repos.d/librewolf.repo ] && return 0
 	whiptail --infobox "Enabling the LibreWolf repository..." 7 50
 	logmsg "librewolf repo"
+	# Also not fatal, for the same reason: a browser must never be able to abort
+	# the installation of an entire machine. If the repo is unreachable the L
+	# rows are skipped and everything else proceeds.
 	curl -fsSL https://repo.librewolf.net/librewolf.repo \
-		-o /etc/yum.repos.d/librewolf.repo >>"$logfile" 2>&1 ||
-		error "Could not download the LibreWolf repository definition."
+		-o /etc/yum.repos.d/librewolf.repo >>"$logfile" 2>&1 || {
+		rm -f /etc/yum.repos.d/librewolf.repo
+		notework "LibreWolf repository unreachable (browser will not be installed)"
+		return 1
+	}
 	dnf -y makecache --refresh >>"$logfile" 2>&1
-	[ -n "$(dnf -q repoquery librewolf 2>/dev/null)" ] ||
-		error "The LibreWolf repository was added but does not offer the librewolf package."
+	[ -n "$(dnf -q repoquery librewolf 2>/dev/null)" ] || {
+		rm -f /etc/yum.repos.d/librewolf.repo
+		notework "LibreWolf repository offers no librewolf package (browser will not be installed)"
+		return 1
+	}
 }
 
 # Extensions come from policy, not from packages: Fedora has no equivalent of
@@ -702,16 +718,20 @@ installationloop() {
 	readprogs "$tmpprogs"
 	total=$(wc -l <"$tmpprogs")
 
-	# Assert third-party repo preconditions once, up front. Otherwise a missing
-	# repo shows up as a run of identical "No match for argument" failures with
-	# no indication of the actual cause.
-	if grep -q '^F,' "$tmpprogs"; then
-		rpm -q --quiet rpmfusion-free-release ||
-			error "progs.csv contains F rows but RPM Fusion is not enabled."
+	# Check third-party repo preconditions once, up front, and skip those rows if
+	# unmet. Otherwise a missing repo shows up as a run of identical "No match
+	# for argument" failures with no indication of the actual cause. Skipping
+	# rather than aborting keeps a dead third-party mirror from taking the whole
+	# installation down with it.
+	skipf=0
+	skipl=0
+	if grep -q '^F,' "$tmpprogs" && ! rpm -q --quiet rpmfusion-free-release; then
+		notework "all F rows skipped: RPM Fusion is not enabled"
+		skipf=1
 	fi
-	if grep -q '^L,' "$tmpprogs"; then
-		[ -f /etc/yum.repos.d/librewolf.repo ] ||
-			error "progs.csv contains L rows but the LibreWolf repository is not configured."
+	if grep -q '^L,' "$tmpprogs" && [ ! -f /etc/yum.repos.d/librewolf.repo ]; then
+		notework "all L rows skipped: the LibreWolf repository is not configured"
+		skipl=1
 	fi
 
 	n=0
@@ -725,6 +745,8 @@ installationloop() {
 		G) gitmakeinstall "$program" "$comment" ;;
 		R) recipeinstall "$program" "$comment" ;;
 		P) pipxinstall "$program" "$comment" ;;
+		F) [ "$skipf" = 1 ] || maininstall "$program" "$comment" ;;
+		L) [ "$skipl" = 1 ] || maininstall "$program" "$comment" ;;
 		*) maininstall "$program" "$comment" ;;
 		esac
 	done 3<"$tmpprogs"
@@ -804,8 +826,13 @@ fc-cache -f >>"$logfile" 2>&1
 # Verify the emoji font actually landed. Without it every status bar module
 # still prints its value but its icon is silently dropped, so the bar looks
 # like a row of bare numbers and the scripts look broken when they are fine.
-fc-list 2>/dev/null | grep -qi "noto color emoji" ||
-	notework "google-noto-color-emoji-fonts (status bar icons will not render; dnf install it and run fc-cache -f)"
+# The monochrome font is the one the status bar actually depends on: dwm's
+# fallback glyph search sets FC_COLOR=FcFalse, so it will not accept the colour
+# emoji font and every bar icon renders as nothing while the numbers still show.
+fc-list 2>/dev/null | grep -qi "NotoEmoji-" ||
+	notework "google-noto-emoji-fonts (status bar icons will NOT render; dnf install it and run fc-cache -f)"
+fc-list 2>/dev/null | grep -qi "NotoColorEmoji" ||
+	notework "google-noto-color-emoji-fonts (colour emoji in the terminal will not render)"
 fc-list 2>/dev/null | grep -qi "font awesome" ||
 	notework "fontawesome-fonts-all (some status bar glyphs will not render)"
 command -v update-desktop-database >/dev/null 2>&1 &&
