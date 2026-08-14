@@ -1,0 +1,2 @@
+# fedora.sh runs on Linux. A CRLF shebang is fatal; enforce LF everywhere.
+* text=auto eol=lf
