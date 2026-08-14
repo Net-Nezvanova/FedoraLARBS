@@ -23,11 +23,37 @@ This erases the disk. Copy off anything you want to keep:
   Check with `git status` and `git log origin/main..HEAD` in each. If either
   has unpushed work, push it now — it is the only copy.
 
-Also make sure you can reach the internet during the install. On a laptop, use
-an **ethernet cable if you have one**. The netinstall ISO downloads everything,
-and configuring wifi in the installer is more fiddly than plugging in a cable.
-If you must use wifi, the installer's network screen can do it — just do that
-step first.
+### Read this before you start: the wifi trap
+
+This is the one failure that can strand you with an unusable machine.
+
+**A Fedora minimal install does not include `NetworkManager-wifi`.** It is a
+separate subpackage. You can install Fedora *over wifi*, reboot, and find you
+have no wireless at all — a known bug of long standing
+([#1195792](https://bugzilla.redhat.com/show_bug.cgi?id=1195792),
+[#1230223](https://bugzilla.redhat.com/show_bug.cgi?id=1230223)). And because
+`fedora.sh` needs the network to run, no network means you cannot even start.
+
+`progs.csv` installs `NetworkManager-wifi`, so wifi works *after* the installer
+runs. The gap is the window between first boot and that point. Cover it with
+**at least one** of these, in order of preference:
+
+1. **Use an ethernet cable** for the install and the first boot. Simplest and
+   completely sidesteps the problem. A cheap USB-ethernet adapter counts.
+2. **USB-tether your phone.** Android USB tethering appears as a plain USB
+   ethernet device, works with in-kernel drivers, needs no firmware or extra
+   packages, and NetworkManager picks it up automatically. This works in the
+   Anaconda installer *and* on first boot. This is the reliable escape hatch.
+3. **Put the RPMs on the USB stick now, while this machine still works.** Belt
+   and braces, and it costs nothing:
+
+   ```sh
+   dnf download --resolve --destdir=/mnt/usb/rpms NetworkManager-wifi
+   ```
+
+   Then after first boot: `sudo dnf install /path/to/rpms/*.rpm`
+
+Do not rely on wifi alone.
 
 ---
 
@@ -221,12 +247,33 @@ which dmenu          # must be /usr/local/bin/dmenu
 rpm -q dmenu         # should say "not installed"
 ```
 
+### No wifi after first boot
+
+The trap described in §0. Get a network by cable or phone tethering, then:
+
+```sh
+sudo dnf install -y NetworkManager-wifi
+sudo systemctl restart NetworkManager
+nmtui
+```
+
+Check the hardware is seen at all with `ip link` and `rfkill list` — if the
+device is missing entirely rather than just unconfigured, it is firmware:
+`sudo dnf install -y linux-firmware` and reboot.
+
 ### No sound
 
 ```sh
 systemctl --user status wireplumber
 pgrep -c wireplumber   # must be exactly 1; more than one means a conflict
 wpctl status
+```
+
+If `wpctl status` shows no sink at all on a laptop made since roughly 2019, the
+audio firmware is missing:
+
+```sh
+sudo dnf install -y alsa-sof-firmware && sudo reboot
 ```
 
 ### Screen brightness keys do nothing

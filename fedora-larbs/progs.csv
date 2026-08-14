@@ -20,6 +20,9 @@
 # vanilla dmenu, which lacks the -P password flag that dmenupass needs as the
 # SUDO_ASKPASS handler. Only the G row below builds the correct fork.
 
+,NetworkManager-wifi,"is what makes wifi work at all. It is a SEPARATE subpackage that a Fedora minimal install does not include, so without this line a laptop has no wireless after reboot."
+,linux-firmware,"provides the wifi, bluetooth and GPU firmware blobs the kernel loads at boot."
+,alsa-sof-firmware,"is the audio firmware nearly every laptop made since 2019 needs. Without it there is no sound at all."
 ,xorg-x11-server-Xorg,"is the X server, the display server itself."
 ,xorg-x11-xinit,"provides startx, which begins the graphical session."
 ,xorg-x11-xauth,"handles the X authority cookie that startx requires."
