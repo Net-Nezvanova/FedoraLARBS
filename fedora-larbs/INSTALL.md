@@ -110,7 +110,7 @@ minute. It resolves every package name against your actual Fedora release,
 which is what turns a 40-minute failure into a 30-second one:
 
 ```sh
-./fedora.sh -n -r https://github.com/Net-Nezvanova/fedorice.git -b fedora
+./fedora.sh -n
 ```
 
 Every line should say `ok`. Warnings about optional ueberzugpp build
@@ -120,7 +120,7 @@ dependencies are fine — image previews fall back to chafa. Anything reported a
 **Then install:**
 
 ```sh
-./fedora.sh -r https://github.com/Net-Nezvanova/fedorice.git -b fedora
+./fedora.sh
 ```
 
 No `sudo` — you are root, which is what it expects.
@@ -189,6 +189,35 @@ nmtui
 
 Text UI for NetworkManager. Connections persist across reboots.
 
+### Claude Code (optional, but useful for fixing this system)
+
+Anthropic publishes a signed dnf repository, so this stays Fedora-native and
+needs no Node.js:
+
+```sh
+sudo tee /etc/yum.repos.d/claude-code.repo <<'EOF'
+[claude-code]
+name=Claude Code
+baseurl=https://downloads.claude.ai/claude-code/rpm/stable
+enabled=1
+gpgcheck=1
+gpgkey=https://downloads.claude.ai/keys/claude-code.asc
+EOF
+
+sudo dnf install claude-code
+```
+
+dnf prompts you to confirm the signing key on first install. Verify the
+fingerprint reads `31DD DE24 DDFA B679 F42D 7BD2 BAA9 29FF 1A7E CACE` before
+accepting it.
+
+Then run `claude` and follow the browser login. Requires a Pro, Max, Team or
+Enterprise account; the free plan does not include Claude Code. Upgrade later
+with `sudo dnf upgrade claude-code` — package installs do not self-update.
+
+This is deliberately not in `progs.csv`: authentication is interactive, so it
+cannot be automated during the install anyway.
+
 ---
 
 ## 6. Verify it worked
@@ -197,7 +226,7 @@ Text UI for NetworkManager. Connections persist across reboots.
 ls -l ~/.zprofile                       # must be a SYMLINK -> .config/shell/profile
 echo $DBUS_SESSION_BUS_ADDRESS          # contains /run/user/1000/bus
 pgrep -c wireplumber                    # exactly 1
-fc-list | grep -ci "noto color emoji"   # at least 1
+fc-list | grep -ci NotoEmoji-           # at least 1 - the B&W font the bar needs
 command -v dwm st dmenu lf xcape        # all found
 ```
 

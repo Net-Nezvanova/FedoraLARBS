@@ -18,9 +18,10 @@
 
 ### CONFIGURATION ###
 
-# Must point at YOUR Fedora fork of voidrice. Upstream voidrice is Arch-specific
-# and will not work here. Set it with -r, or edit this line.
-dotfilesrepo=""
+# The dotfiles this installer deploys. Override with -r to use a different fork.
+# It must be a FEDORA fork -- upstream voidrice is Arch-specific and deploying it
+# would produce a broken system.
+dotfilesrepo="https://github.com/Net-Nezvanova/fedorice.git"
 # Subdirectory within that repo holding the dotfiles themselves (the directory
 # that contains .config and .local). Leave empty if they sit at the repo root;
 # set it with -d if you keep the installer and the dotfiles in one repository.
