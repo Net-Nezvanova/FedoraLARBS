@@ -48,10 +48,16 @@ runs. The gap is the window between first boot and that point. Cover it with
    and braces, and it costs nothing:
 
    ```sh
-   dnf download --resolve --destdir=/mnt/usb/rpms NetworkManager-wifi
+   dnf download --resolve --destdir=/mnt/usb/rpms \
+     NetworkManager-wifi iwlwifi-mvm-firmware iwlwifi-dvm-firmware
    ```
 
    Then after first boot: `sudo dnf install /path/to/rpms/*.rpm`
+
+   The firmware packages matter as much as `NetworkManager-wifi`. Fedora's
+   `linux-firmware` covers Atheros, Broadcom, Realtek and MediaTek wifi but
+   **not Intel**, which is what is in most laptops — and nothing in the
+   dependency graph pulls the Intel firmware in.
 
 Do not rely on wifi alone.
 
@@ -318,9 +324,24 @@ sudo systemctl restart NetworkManager
 nmtui
 ```
 
-Check the hardware is seen at all with `ip link` and `rfkill list` — if the
-device is missing entirely rather than just unconfigured, it is firmware:
-`sudo dnf install -y linux-firmware` and reboot.
+If `ip link` shows no wireless device **at all** — only `lo` and `enp*` — it is
+missing firmware, not configuration. Do **not** reach for `linux-firmware`: it is
+already installed (the kernel recommends it) and dnf will tell you there is
+nothing to do, which reads like the card is unsupported when it is not.
+
+Fedora's `linux-firmware` covers Atheros, Broadcom, Realtek and MediaTek wifi
+but deliberately **not** Intel. Those are separate packages that nothing pulls
+in automatically:
+
+```sh
+sudo dnf install -y iwlwifi-mvm-firmware iwlwifi-dvm-firmware iwlegacy-firmware
+sudo reboot
+```
+
+Confirm with `dmesg | grep -i iwlwifi` — `Direct firmware load for
+iwlwifi-*.ucode failed with error -2` is the signature of exactly this.
+
+`progs.csv` installs all three, so a completed run should never leave you here.
 
 ### No sound
 
