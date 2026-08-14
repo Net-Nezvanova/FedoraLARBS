@@ -160,9 +160,10 @@ Reboot, log in as the new user on tty1, and the session starts by itself.
 
 ### Changed
 
-- **`useradd -m -G wheel`**, not Arch's `-g wheel`. Fedora uses user private
+- **`useradd -m -G wheel,video`**, not Arch's `-g wheel`. Fedora uses user private
   groups; making `wheel` the *primary* group would leave every file the user
-  creates group-owned by `wheel`.
+  creates group-owned by `wheel`. `video` is what brightnessctl's udev rule grants
+  backlight control to, so without it the brightness keys do nothing on a laptop.
 - **`usermod -s`**, not `chsh` — `chsh` lives in `util-linux-user`, which is
   not in `@core`, so upstream's call would silently do nothing.
 - **chrony**, not `ntpd -q -g`, and it runs *before* any repository key import.
