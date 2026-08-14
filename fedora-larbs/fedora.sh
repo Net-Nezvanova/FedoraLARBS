@@ -44,8 +44,10 @@ freetype-devel fontconfig-devel harfbuzz-devel"
 # Fedora has no base-devel equivalent that includes the X headers, so they are
 # enumerated above. Without them dwm/st/dmenu fail on <X11/Xlib.h>.
 
-ueberzugppdeps="cmake gcc-c++ openssl-devel libvips-devel spdlog-devel
-fmt-devel nlohmann-json-devel tbb-devel libxcb-devel xcb-util-image-devel
+# Fedora names two of these differently from most distributions: the libvips
+# devel package is vips-devel, and nlohmann/json ships as json-devel.
+ueberzugppdeps="cmake gcc-c++ openssl-devel vips-devel spdlog-devel
+fmt-devel json-devel tbb-devel libxcb-devel xcb-util-image-devel
 chafa-devel cli11-devel"
 
 dryrun=0
@@ -138,6 +140,7 @@ resolve() {
 	tmpprogs="$(mktemp)"
 	readprogs "$tmpprogs"
 	missing=0
+	warned=0
 
 	# On a bare @core system git is not installed yet, so a failed ls-remote
 	# would be reported as a missing repository. Say so instead of lying.
@@ -186,9 +189,12 @@ resolve() {
 		esac
 	done 3<"$tmpprogs"
 
-	printf "\\nueberzugpp build dependencies:\\n"
+	# Warnings, not errors. The ueberzugpp build is deliberately non-fatal, so a
+	# missing build dependency costs image previews -- lf falls back to chafa --
+	# rather than costing the installation. Blocking on these would be wrong.
+	printf "\\nueberzugpp build dependencies (optional; previews fall back to chafa):\\n"
 	for p in $ueberzugppdeps; do
-		checkpkg "$p" || missing=$((missing + 1))
+		checkpkg "$p" || warned=$((warned + 1))
 	done
 
 	printf "\\nSource repositories:\\n"
@@ -206,11 +212,13 @@ resolve() {
 
 	rm -f "$tmpprogs"
 	printf "\\n"
+	[ "$warned" -gt 0 ] &&
+		printf "\033[33m%s optional ueberzugpp build dep(s) unavailable.\033[0m Install continues; image previews will use chafa.\\n" "$warned"
 	if [ "$missing" -gt 0 ]; then
 		printf "\033[31m%s item(s) could not be resolved.\033[0m Fix progs.csv before installing.\\n" "$missing"
 		exit 1
 	fi
-	printf "\033[32mEverything resolved.\033[0m\\n"
+	printf "\033[32mEverything required resolved.\033[0m\\n"
 	exit 0
 }
 
