@@ -284,8 +284,15 @@ outside Fedora's repositories:
 2. **LibreWolf** is installed from `repo.librewolf.net`, with `gpgcheck` on as
    the repo file configures it.
 
+A third, of a different kind: **xcape is vendored** in `vendor/xcape/`, because
+its upstream repository was deleted outright. The source is Debian's packaged
+1.2 rather than a surviving GitHub fork — see `vendor/xcape/PROVENANCE.md`. It
+is committed here precisely so the install depends on nothing third-party at
+run time, and so the code that runs on every login is auditable in this repo.
+
 **No COPRs are used.** That is deliberate — the main nsxiv COPR is already dead
-(404), which is exactly the failure mode a COPR dependency invites. A
+(404), and now so is xcape's upstream. That is exactly the failure mode a
+third-party repository dependency invites. A
 consequence worth knowing: `dnf5-plugins` is never needed, because
 `dnf config-manager` is never called. The moment you reach for `dnf copr
 enable`, you will need that package and you will have left the sourcing policy

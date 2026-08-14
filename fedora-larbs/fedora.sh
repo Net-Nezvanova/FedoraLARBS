@@ -25,7 +25,10 @@ dotfilesrepo=""
 # that contains .config and .local). Leave empty if they sit at the repo root;
 # set it with -d if you keep the installer and the dotfiles in one repository.
 dotfilesdir=""
-progsfile="progs.csv"
+# Resolved so the script can be invoked from anywhere and still find the files
+# that ship beside it (progs.csv, vendor/).
+scriptdir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+progsfile="$scriptdir/progs.csv"
 repobranch="fedora"
 logfile="/var/log/fedora-larbs.log"
 
@@ -169,7 +172,14 @@ resolve() {
 				missing=$((missing + 1))
 			fi
 			;;
-		R) printf "  --    recipe  %s (build deps checked below)\\n" "$program" ;;
+		R)
+			if [ "$program" = xcape ] && [ ! -f "$scriptdir/vendor/xcape/xcape.c" ]; then
+				printf "  MISS  vendor  %s (expected %s)\\n" "$program" "$scriptdir/vendor/xcape/xcape.c"
+				missing=$((missing + 1))
+			else
+				printf "  --    recipe  %s (build deps checked below)\\n" "$program"
+			fi
+			;;
 		P) printf "  --    pipx    %s\\n" "$program" ;;
 		F)
 			if rpm -q --quiet rpmfusion-free-release; then
@@ -382,6 +392,29 @@ build_lf() {
 		sh -c "cd '$dir' && go build -o lf" >>"$logfile" 2>&1 || return 1
 	install -Dm755 "$dir/lf" /usr/local/bin/lf || return 1
 	[ -f "$dir/lf.1" ] && install -Dm644 "$dir/lf.1" /usr/local/share/man/man1/lf.1
+	relabel
+}
+
+# xcape is vendored rather than cloned. Upstream github.com/alols/xcape was
+# deleted, and the surviving forks are either divergent variants or unvetted, so
+# the source in vendor/xcape is Debian's packaged 1.2 (GPL-3.0, Albin Olsson).
+# Building from a committed copy means the install depends on no third-party
+# repository at all, and the exact source is auditable in this repo.
+build_xcape() {
+	src="$scriptdir/vendor/xcape"
+	[ -f "$src/xcape.c" ] || {
+		printf "vendored xcape source missing at %s\\n" "$src" >>"$logfile"
+		return 1
+	}
+	dir="$repodir/xcape"
+	rm -rf "$dir"
+	mkdir -p "$dir"
+	cp -f "$src"/xcape.c "$src"/Makefile "$src"/xcape.1 "$src"/LICENSE "$dir"/ || return 1
+	chown -R "$name":"$name" "$dir"
+	sudo -u "$name" -H make -C "$dir" >>"$logfile" 2>&1 || return 1
+	# Upstream's Makefile defaults to PREFIX=/usr with an odd MANDIR; point both
+	# at /usr/local so it lands with the other source-built programs.
+	make -C "$dir" PREFIX=/usr/local MANDIR=/share/man/man1 install >>"$logfile" 2>&1 || return 1
 	relabel
 }
 
