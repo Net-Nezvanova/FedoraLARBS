@@ -57,13 +57,20 @@ chafa-devel cli11-devel"
 dryrun=0
 export TERM=ansi
 
+# git must never stop to ask for credentials. This runs unattended behind a
+# whiptail UI, where a prompt is invisible and simply hangs the install forever
+# with no indication of why. With this set, a private or misnamed repository
+# fails immediately and says so.
+export GIT_TERMINAL_PROMPT=0
+
 ### ARGUMENTS ###
 
 usage() {
 	cat <<-USAGE
 	Usage: fedora.sh -r <dotfiles-repo> [-d subdir] [-b branch] [-p progs.csv] [-n] [-h]
 
-	  -r  git URL of your Fedora fork of voidrice (required)
+	  -r  git URL of a Fedora fork of voidrice to deploy
+	      (default: $dotfilesrepo)
 	  -d  subdirectory of that repo containing the dotfiles, if they are not at
 	      its root. Use this when the installer and the dotfiles share one
 	      repository, e.g. -d voidrice
@@ -74,7 +81,7 @@ usage() {
 
 	Run as root on a fresh minimal Fedora install. Do the dry run first.
 	USAGE
-	exit 0
+	exit "${1:-0}"
 }
 
 while getopts ":r:d:b:p:nh" o; do
@@ -85,7 +92,12 @@ while getopts ":r:d:b:p:nh" o; do
 	b) repobranch="$OPTARG" ;;
 	p) progsfile="$OPTARG" ;;
 	n) dryrun=1 ;;
-	*) printf "Invalid option: -%s\\n\\n" "$OPTARG" && usage ;;
+	*)
+		# Must not exit 0: a typo in a flag would otherwise be reported to any
+		# calling script as a successful run.
+		printf "Invalid option: -%s\\n\\n" "$OPTARG" >&2
+		usage 1
+		;;
 	esac
 done
 
@@ -281,6 +293,18 @@ preinstallmsg() {
 }
 
 finalize() {
+	# A missing window manager is not a partial success. Telling someone the
+	# session will start when dwm was never built sends them to a grey screen
+	# with no terminal and no idea why, which is a genuinely bad place to be.
+	wmok=1
+	for p in dwm st dmenu; do
+		command -v "$p" >/dev/null 2>&1 || wmok=0
+	done
+	if [ "$wmok" -eq 0 ]; then
+		whiptail --title "Installed, but the desktop will NOT start" \
+			--msgbox "One of dwm, st or dmenu was not built, so logging in will give you a grey screen with no way to open a terminal.\\n\\nPress Ctrl+Alt+F2 for a text console and look for the build error:\\n\\n  grep -i FAILED $logfile\\n\\nThen rebuild by hand, for example:\\n\\n  cd ~/.local/src/dwm && sudo make install\\n  sudo restorecon -RF /usr/local/bin\\n\\nOther failures:\\n$(cat "$failedlist" 2>/dev/null)" 24 74
+		return
+	fi
 	if [ -s "$failedlist" ]; then
 		whiptail --title "Installed, with failures" \
 			--msgbox "The installation finished, but these items failed:\\n\\n$(cat "$failedlist")\\n\\nSee $logfile for the reason. Everything else is in place: log out, log back in as $name, and the session will start automatically on tty1." 20 70
@@ -317,6 +341,14 @@ maininstall() {
 # Applies the small source patches this port needs before make runs.
 patchsource() {
 	case "$1" in
+	dwm)
+		[ -f config.h ] || return 0
+		# The laptop brightness keys are bound to xbacklight, which is a no-op on
+		# modern KMS drivers and is not packaged for Fedora at all. brightnessctl
+		# is what actually works, and progs.csv installs it.
+		sed -i 's/"xbacklight", "-inc", "15"/"brightnessctl", "set", "15%+"/;
+		        s/"xbacklight", "-dec", "15"/"brightnessctl", "set", "15%-"/' config.h
+		;;
 	dwmblocks)
 		[ -f config.h ] || [ ! -f config.def.h ] || cp config.def.h config.h
 		[ -f config.h ] || return 0
@@ -662,7 +694,8 @@ putgitrepo() {
 	[ -d "$src/.config" ] ||
 		error "No .config directory in ${dotfilesdir:-the repository root}. If the installer and the dotfiles share one repository, pass the dotfiles subdirectory with -d (for example: -d voidrice)."
 
-	sudo -u "$name" -H cp -rfT "$src" "$2"
+	sudo -u "$name" -H cp -rfT "$src" "$2" ||
+		error "Could not copy the dotfiles into $2."
 	rm -rf "$dir"
 }
 
@@ -789,7 +822,11 @@ command -v chronyc >/dev/null 2>&1 && chronyc makestep >>"$logfile" 2>&1
 
 adduserandpass || error "Error adding username and/or password."
 
-trap 'rm -f /etc/sudoers.d/larbstemp' HUP INT QUIT TERM EXIT
+# Signals must actually stop the run. Previously the handler cleaned up and the
+# installer carried on, so Ctrl-C looked like it did nothing while quietly
+# removing the passwordless-sudo rule the rest of the run depends on.
+trap 'rm -f /etc/sudoers.d/larbstemp; exit 1' HUP INT QUIT TERM
+trap 'rm -f /etc/sudoers.d/larbstemp' EXIT
 newperms larbstemp "%wheel ALL=(ALL) NOPASSWD: ALL
 Defaults:%wheel,root runcwd=*"
 
