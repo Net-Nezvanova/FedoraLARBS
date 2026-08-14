@@ -579,8 +579,10 @@ adduserandpass() {
 	# Fedora uses user private groups. wheel is supplementary (-G), never the
 	# primary group (-g) as on Arch, or every file this user creates would be
 	# group-owned by wheel.
-	useradd -m -G wheel -s /bin/zsh "$name" >>"$logfile" 2>&1 ||
-		usermod -a -G wheel "$name" >>"$logfile" 2>&1
+	# video is needed on real hardware: brightnessctl's udev rule hands backlight
+	# control to that group, and without it screen brightness keys do nothing.
+	useradd -m -G wheel,video -s /bin/zsh "$name" >>"$logfile" 2>&1 ||
+		usermod -a -G wheel,video "$name" >>"$logfile" 2>&1
 	mkdir -p "/home/$name"
 	chown "$name":"$name" "/home/$name"
 	export repodir="/home/$name/.local/src"
@@ -798,6 +800,14 @@ usermod -s /bin/zsh "$name" >>"$logfile" 2>&1
 # resolve the .desktop files the dotfiles just installed, which breaks
 # linkhandler and opout.
 fc-cache -f >>"$logfile" 2>&1
+
+# Verify the emoji font actually landed. Without it every status bar module
+# still prints its value but its icon is silently dropped, so the bar looks
+# like a row of bare numbers and the scripts look broken when they are fine.
+fc-list 2>/dev/null | grep -qi "noto color emoji" ||
+	notework "google-noto-color-emoji-fonts (status bar icons will not render; dnf install it and run fc-cache -f)"
+fc-list 2>/dev/null | grep -qi "font awesome" ||
+	notework "fontawesome-fonts-all (some status bar glyphs will not render)"
 command -v update-desktop-database >/dev/null 2>&1 &&
 	update-desktop-database "/home/$name/.local/share/applications" >>"$logfile" 2>&1
 

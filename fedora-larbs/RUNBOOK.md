@@ -1,6 +1,6 @@
 # Fedora LARBS — Runbook
 
-Companion to `fedora.sh`. It explains what the installer does, why each step
+See INSTALL.md for the linear step-by-step procedure. This file explains what the installer does, why each step
 differs from upstream LARBS, and how to verify the result.
 
 `fedora.sh` is a port of [LARBS](https://larbs.xyz) from Arch to Fedora 44. It
