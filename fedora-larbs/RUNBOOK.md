@@ -57,6 +57,43 @@ git -C voidrice bundle create /tmp/voidrice.bundle fedora
 `fedora.sh` refuses to run without `-r`, because upstream voidrice is
 Arch-specific and deploying it would produce a broken system.
 
+### One repository or two
+
+`-r` points at whatever holds the **dotfiles**. The installer deploys a
+repository by copying it over `$HOME`, so it needs to land on the directory that
+contains `.config` and `.local` — not on a parent holding several projects.
+
+**Two repositories** (the default assumption). Nothing extra:
+
+```sh
+./fedora.sh -r https://github.com/you/voidrice-fedora.git
+```
+
+**One repository holding both**, e.g.
+
+```
+my-fedora-rice/
+├── fedora-larbs/     fedora.sh, progs.csv, RUNBOOK.md
+└── voidrice/         .config/, .local/, .zprofile, ...
+```
+
+then name the dotfiles subdirectory with `-d`, and the branch with `-b` if it
+is not `fedora`:
+
+```sh
+./fedora.sh -r https://github.com/you/my-fedora-rice.git -d voidrice -b main
+```
+
+Without `-d` the copy would put `~/fedora-larbs/` and `~/voidrice/` into your
+home and no dotfiles at all. The script checks for `.config` under whatever
+`-r`/`-d` resolve to and stops with that suggestion rather than deploying
+nonsense, but it is easier to pass the flag.
+
+A third option is to put the dotfiles at the repository **root** and the
+installer in a subdirectory. That works with a bare `-r` and no `-d`, but the
+installer directory is then copied into `$HOME` too, so add it to the cleanup
+list next to `.git` and `README.md` in the main body.
+
 ---
 
 ## 3. Get the installer onto the target
@@ -95,7 +132,8 @@ highest-value step in this runbook.
 ## 5. Install
 
 ```sh
-sudo ./fedora.sh -r <dotfiles-repo-url>
+sudo ./fedora.sh -r <dotfiles-repo-url>            # dotfiles at the repo root
+sudo ./fedora.sh -r <repo-url> -d voidrice -b main # one repo holding both
 ```
 
 Four whiptail prompts (welcome, username, password, confirm), then it is

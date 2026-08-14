@@ -21,6 +21,10 @@
 # Must point at YOUR Fedora fork of voidrice. Upstream voidrice is Arch-specific
 # and will not work here. Set it with -r, or edit this line.
 dotfilesrepo=""
+# Subdirectory within that repo holding the dotfiles themselves (the directory
+# that contains .config and .local). Leave empty if they sit at the repo root;
+# set it with -d if you keep the installer and the dotfiles in one repository.
+dotfilesdir=""
 progsfile="progs.csv"
 repobranch="fedora"
 logfile="/var/log/fedora-larbs.log"
@@ -51,9 +55,12 @@ export TERM=ansi
 
 usage() {
 	cat <<-USAGE
-	Usage: fedora.sh -r <dotfiles-repo> [-b branch] [-p progs.csv] [-n] [-h]
+	Usage: fedora.sh -r <dotfiles-repo> [-d subdir] [-b branch] [-p progs.csv] [-n] [-h]
 
 	  -r  git URL of your Fedora fork of voidrice (required)
+	  -d  subdirectory of that repo containing the dotfiles, if they are not at
+	      its root. Use this when the installer and the dotfiles share one
+	      repository, e.g. -d voidrice
 	  -b  branch of that repo to deploy (default: $repobranch)
 	  -p  path or URL of the programs list (default: $progsfile)
 	  -n  dry run: resolve every package and repo without installing anything
@@ -64,10 +71,11 @@ usage() {
 	exit 0
 }
 
-while getopts ":r:b:p:nh" o; do
+while getopts ":r:d:b:p:nh" o; do
 	case "$o" in
 	h) usage ;;
 	r) dotfilesrepo="$OPTARG" ;;
+	d) dotfilesdir="${OPTARG#/}" && dotfilesdir="${dotfilesdir%/}" ;;
 	b) repobranch="$OPTARG" ;;
 	p) progsfile="$OPTARG" ;;
 	n) dryrun=1 ;;
@@ -582,7 +590,19 @@ putgitrepo() {
 	sudo -u "$name" -H git clone --depth 1 --single-branch --no-tags -q \
 		--recurse-submodules --shallow-submodules -b "$branch" "$1" "$dir" >>"$logfile" 2>&1 ||
 		error "Could not clone $1 (branch $branch). Check the URL and that the branch exists."
-	sudo -u "$name" -H cp -rfT "$dir" "$2"
+
+	src="$dir"
+	[ -n "$dotfilesdir" ] && src="$dir/$dotfilesdir"
+	[ -d "$src" ] ||
+		error "The repository has no directory '$dotfilesdir'. Pass -d with the subdirectory that holds .config and .local."
+	# Guard against pointing -r at a repository root that holds the installer
+	# and the dotfiles side by side. Without this the copy below would put
+	# directories into $HOME instead of dotfiles, and the first symptom would be
+	# a user logging in to a bare shell with nothing configured.
+	[ -d "$src/.config" ] ||
+		error "No .config directory in ${dotfilesdir:-the repository root}. If the installer and the dotfiles share one repository, pass the dotfiles subdirectory with -d (for example: -d voidrice)."
+
+	sudo -u "$name" -H cp -rfT "$src" "$2"
 	rm -rf "$dir"
 }
 
