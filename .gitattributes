@@ -1,0 +1,2 @@
+# This repo ships a shell script that runs on Linux. A CRLF shebang is fatal.
+* text=auto eol=lf
