@@ -5,7 +5,7 @@ differs from upstream LARBS, and how to verify the result.
 
 `fedora.sh` is a port of [LARBS](https://larbs.xyz) from Arch to Fedora 44. It
 runs as root on a fresh minimal install, creates a user, installs the programs
-in `progs.csv`, deploys the [voidrice fork](https://github.com/Net-Nezvanova/voidrice-fedora), and configures the
+in `progs.csv`, deploys the [voidrice fork](https://github.com/Net-Nezvanova/fedorice), and configures the
 system so that logging in on tty1 starts dwm.
 
 ---
@@ -66,7 +66,7 @@ contains `.config` and `.local` — not on a parent holding several projects.
 **Two repositories** (the default assumption). Nothing extra:
 
 ```sh
-./fedora.sh -r https://github.com/you/voidrice-fedora.git
+./fedora.sh -r https://github.com/you/your-dotfiles.git
 ```
 
 **One repository holding both**, e.g.

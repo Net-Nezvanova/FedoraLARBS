@@ -1,5 +1,5 @@
 # Upstream reference checkout, not part of this repo.
 LARBS/
 # The dotfiles now live in their own repository:
-# https://github.com/Net-Nezvanova/voidrice-fedora
+# https://github.com/Net-Nezvanova/fedorice
 voidrice/
