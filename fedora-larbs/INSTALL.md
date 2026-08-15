@@ -60,6 +60,34 @@ Anaconda GUI** — a kickstart is the only practical way to get them into a
 Minimal install. Read the header of that file before using it; it leaves
 partitioning and the root password interactive on purpose.
 
+### Asking for the groups is not the same as getting them
+
+On 2026-08-15, on a ThinkPad T480s, a near-identical copy of this kickstart was
+accepted by Anaconda **and then silently ignored**. The file arrived intact
+(`/root/original-ks.cfg` matched it byte for byte) and parses cleanly under
+pykickstart's F44 handler, but `/root/anaconda-ks.cfg` — what was actually
+applied — contained only `@^custom-environment` and `@networkmanager-submodules`.
+`@hardware-support` and `git` had been dropped, with no error and no prompt. The
+install reported success and the laptop booted with no wifi: exactly the failure
+this whole section exists to prevent.
+
+The likeliest trigger is opening the **Software Selection** spoke, which
+re-derives the package set from what the GUI can see and discards kickstart-only
+additions — and these groups are invisible to it by definition. That was not
+proven, so the kickstart no longer depends on the answer: its `%post` block now
+checks what actually landed, identifies your wireless hardware from sysfs,
+installs whatever is missing while the installer's network is still up, and
+writes `/etc/motd` if it cannot. `%packages` is kept as the fast path only.
+
+**So: before you reboot out of the installer, read `/root/larbs-bootstrap.log`
+in the target.** It says in plain words whether first boot will have network. On
+2026-08-15 it called the failure correctly and nobody read it.
+
+And the rule that cost an evening: **after installing wifi firmware, reboot.**
+Drivers read firmware once, when they probe at boot. Installing it into a running
+system that already failed to find it does nothing until the driver probes
+again — a correct fix will look like a failed one.
+
 If you would rather not use a kickstart, cover the gap with **at least one** of
 these instead:
 

@@ -228,6 +228,16 @@ window manager.
    wifi-only laptop has no network on first boot and `fedora.sh` cannot run at
    all. No change to this repo's package list could ever have fixed that. It is
    closed at install time instead, by `ks/larbs-minimal.ks`.
+
+   **Update, 2026-08-15:** putting the groups in `%packages` turned out not to be
+   sufficient. On a T480s install, Anaconda accepted the kickstart intact and
+   then committed a package set with `@hardware-support` and `git` removed — no
+   error, no prompt — and the laptop booted with no wifi anyway. The kickstart
+   now verifies its own result in `%post`, detects the wireless driver from
+   sysfs, installs what is missing while the installer still has network, and
+   escalates to `/etc/motd` if that fails. Read
+   `/root/larbs-bootstrap.log` before rebooting out of the installer. See
+   `INSTALL.md` → "Asking for the groups is not the same as getting them".
 2. **`cronie` was never installed** but `crond` was enabled. It is in comps
    `standard`, not `core`, so on the documented Minimal install the unit did not
    exist and the enable failed silently — taking `cron/checkup` with it, and
