@@ -34,12 +34,40 @@ have no wireless at all — a known bug of long standing
 [#1230223](https://bugzilla.redhat.com/show_bug.cgi?id=1230223)). And because
 `fedora.sh` needs the network to run, no network means you cannot even start.
 
-`progs.csv` installs `NetworkManager-wifi`, so wifi works *after* the installer
-runs. The gap is the window between first boot and that point. Cover it with
-**at least one** of these, in order of preference:
+Precisely, "Minimal Install" is the comps environment `custom-environment`,
+which is `@core` and nothing else. `@core` has `NetworkManager` but **not**
+`NetworkManager-wifi`, **not** `wpa_supplicant`, and no firmware package of any
+kind. Confirm it yourself on any Fedora machine with `dnf group info core`.
+
+`progs.csv` installs all of them, so wifi works *after* the installer runs. The
+gap is the window between first boot and that point — and on a wifi-only laptop
+that gap is unbridgeable, because `fedora.sh` needs the network in order to
+install the things that provide the network. This is why a build that works
+perfectly in a VM (virtio NIC, no firmware required) fails on real hardware.
+
+**The fix is to close the gap during installation**, using the kickstart in
+`ks/larbs-minimal.ks`:
+
+```
+inst.ks=hd:LABEL=Ventoy:/ks/larbs-minimal.ks
+```
+
+It is a normal Minimal install plus two comps groups — `@hardware-support`
+(the Intel wifi firmware, GPU firmware, SOF audio firmware and microcode) and
+`@networkmanager-submodules` (`NetworkManager-wifi`, `wpa_supplicant`). Both are
+marked `uservisible: no` in comps, which means **they cannot be ticked in the
+Anaconda GUI** — a kickstart is the only practical way to get them into a
+Minimal install. Read the header of that file before using it; it leaves
+partitioning and the root password interactive on purpose.
+
+If you would rather not use a kickstart, cover the gap with **at least one** of
+these instead:
 
 1. **Use an ethernet cable** for the install and the first boot. Simplest and
    completely sidesteps the problem. A cheap USB-ethernet adapter counts.
+   Note that some thin laptops — the ThinkPad T480s among them — have no
+   full-size RJ45 at all and need a proprietary dongle, so check before relying
+   on this.
 2. **USB-tether your phone.** Android USB tethering appears as a plain USB
    ethernet device, works with in-kernel drivers, needs no firmware or extra
    packages, and NetworkManager picks it up automatically. This works in the
@@ -49,7 +77,8 @@ runs. The gap is the window between first boot and that point. Cover it with
 
    ```sh
    dnf download --resolve --destdir=/mnt/usb/rpms \
-     NetworkManager-wifi iwlwifi-mvm-firmware iwlwifi-dvm-firmware
+     NetworkManager-wifi wpa_supplicant \
+     iwlwifi-mvm-firmware iwlwifi-dvm-firmware iwlegacy-firmware
    ```
 
    Then after first boot: `sudo dnf install /path/to/rpms/*.rpm`
@@ -82,6 +111,12 @@ Boot can stay enabled; nothing here needs unsigned kernel modules.
 
 ## 2. Install Fedora
 
+If you are using `ks/larbs-minimal.ks` (recommended — see the wifi trap above),
+add `inst.ks=hd:LABEL=Ventoy:/ks/larbs-minimal.ks` at the boot prompt, adjusting
+the label and path to wherever you put the file. The kickstart sets the software
+selection for you; Anaconda will still stop and ask for the disk layout and the
+root password. Step 3 below is then handled for you — do the rest as written.
+
 In the installer (Anaconda), do these **in this order**:
 
 1. **Network & Host Name** — turn the connection **ON**. It defaults to off, and
@@ -104,6 +139,20 @@ Begin installation, then reboot and remove the USB.
 ## 3. Run the installer
 
 Log in at the text console as **root**.
+
+**Check the network before anything else.** This is the single check that
+catches the wifi trap, and it takes five seconds:
+
+```sh
+nmcli device status                       # a device must say "connected"
+rpm -q NetworkManager-wifi wpa_supplicant iwlwifi-mvm-firmware
+```
+
+If the device list has no connected entry, or any of those packages reports
+"not installed", stop here and fix the network first — see the wifi trap in
+section 0. Running `fedora.sh` without a working network fails immediately at
+its host check, and on a laptop with no other OS that is how people end up
+stranded. Everything below assumes this check passed.
 
 ```sh
 dnf install -y git

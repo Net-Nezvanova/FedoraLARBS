@@ -54,8 +54,12 @@ git -C voidrice bundle create /tmp/voidrice.bundle fedora
 # copy the bundle to the target, then use its path as the -r argument
 ```
 
-`fedora.sh` refuses to run without `-r`, because upstream voidrice is
-Arch-specific and deploying it would produce a broken system.
+`-r` is optional. It defaults to `Net-Nezvanova/fedorice`, the Fedora dotfiles
+this installer is built against, so a plain `./fedora.sh` is a complete install.
+Pass `-r` only to deploy a different repository.
+
+Do not point it at upstream voidrice: that repo is Arch-specific and deploying
+it here produces a broken system. `fedora.sh` cannot detect this for you.
 
 ### One repository or two
 
@@ -210,6 +214,46 @@ Four upstream bugs, all inherited by every LARBS fork:
    directory. Now `mktemp`.
 4. Every install is silenced to `/dev/null`, discarding all error output. Now
    logged, with failures collected and reported at the end instead of vanishing.
+
+### Fixed after the first bare-metal attempt
+
+The port was written against a Proxmox VM and worked there. Everything below is
+a fault that only a real laptop exposes, because a VM's virtio NIC needs no
+firmware, its default sink and backlight behave, and nobody reboots it from the
+window manager.
+
+1. **The bootstrap gap — the reason the first bare-metal install failed.**
+   `progs.csv` correctly lists `NetworkManager-wifi` and the Intel firmware, but
+   they cannot help: a Minimal install is `@core`, which has none of them, so a
+   wifi-only laptop has no network on first boot and `fedora.sh` cannot run at
+   all. No change to this repo's package list could ever have fixed that. It is
+   closed at install time instead, by `ks/larbs-minimal.ks`.
+2. **`cronie` was never installed** but `crond` was enabled. It is in comps
+   `standard`, not `core`, so on the documented Minimal install the unit did not
+   exist and the enable failed silently — taking `cron/checkup` with it, and
+   with it the status bar's update count.
+3. **Every `NOPASSWD` rule for shutdown, reboot and poweroff was dead.** They
+   were written as `/usr/sbin/...`; Fedora completed the `/usr` merge in 42, a
+   user's `PATH` finds `/usr/bin/shutdown`, and sudo compares the resolved path
+   literally. Now `/usr/bin/...`.
+4. **No polkit authentication agent.** The `polkit` daemon was installed with
+   nothing able to prompt, so every privileged action in `sysact` — shutdown,
+   reboot, suspend, hibernate — failed silently from inside dwm. `lxpolkit` is
+   now installed and autostarted (`polkit-gnome` no longer exists in Fedora).
+5. **Source trees were built as root inside the user's home**, leaving
+   root-owned `config.h` files that §8 of this document tells you to edit. Now
+   compiled as the user, with only `make install` privileged.
+6. **`checksymlinks` ran too late and checked too little.** It fired after the
+   dotfiles were already copied into `$HOME`, so a bad repo aborted the install
+   with packages and dotfiles in place but no sudoers rules, no touchpad config
+   and no services. It now validates the staging clone before anything is
+   copied, and covers all six symlinks rather than four.
+7. **`QT_QPA_PLATFORMTHEME=gtk2` had no plugin behind it.** `qt5-qtstyleplugins`
+   was missing, so every Qt program warned and fell back to Fusion.
+8. **RPM Fusion free was gated on nonfree.** Both URLs went into one transaction
+   probed only via the free URL, so an unreachable nonfree mirror disabled both
+   and broke the ffmpeg swap — despite full ffmpeg living in free and nothing
+   here needing nonfree at all.
 
 ---
 

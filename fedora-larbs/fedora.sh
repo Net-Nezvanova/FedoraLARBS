@@ -382,7 +382,16 @@ gitmakeinstall() {
 		return 1
 	}
 	patchsource "$progname"
-	make >>"$logfile" 2>&1 && make install >>"$logfile" 2>&1 || notework "make: $progname"
+	# patchsource's `sed -i` runs as root and rewrites config.h with root
+	# ownership, and building as root would leave a root-owned tree in the
+	# user's home. Both INSTALL.md and RUNBOOK.md tell the user to edit
+	# ~/.local/src/dwmblocks/config.h afterwards, which would then be denied,
+	# and the `git pull` retry above would fail on the next run. Hand the tree
+	# back and compile as the user; only `make install` needs root, to write
+	# into /usr/local. This is the same split build_xcape already uses.
+	chown -R "$name":"$name" "$dir"
+	sudo -u "$name" -H make >>"$logfile" 2>&1 &&
+		make install >>"$logfile" 2>&1 || notework "make: $progname"
 	cd /tmp || return 1
 	relabel
 }
@@ -481,7 +490,9 @@ build_ueberzugpp() {
 ### REPOSITORIES ###
 
 enablerpmfusion() {
-	rpm -q --quiet rpmfusion-free-release && rpm -q --quiet rpmfusion-nonfree-release && return 0
+	# Gated on free alone: nonfree is optional (see below), so requiring it here
+	# would re-run the whole block on every invocation once free is in place.
+	rpm -q --quiet rpmfusion-free-release && return 0
 	whiptail --infobox "Enabling RPM Fusion..." 7 40
 	logmsg "rpmfusion"
 	freeurl="https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$fedver.noarch.rpm"
@@ -493,10 +504,22 @@ enablerpmfusion() {
 		notework "RPM Fusion (no release package for Fedora $fedver yet; full ffmpeg codecs unavailable)"
 		return 1
 	}
+	# Probe nonfree separately instead of putting both URLs into one transaction
+	# gated on the free probe alone. An unreachable nonfree mirror used to take
+	# free down with it and then break the ffmpeg swap as well -- even though
+	# full ffmpeg lives in free and nothing here needs nonfree at all (there are
+	# no F rows in progs.csv). Free is what the install actually depends on.
+	repourls="$freeurl"
+	if curl -sfI "$nonfreeurl" >/dev/null 2>&1; then
+		repourls="$freeurl $nonfreeurl"
+	else
+		notework "RPM Fusion nonfree (unreachable; free was enabled on its own)"
+	fi
 	# --nogpgcheck: the RPM Fusion signing key is not trusted until the release
 	# package that ships it is installed. This is the documented bootstrap, and
 	# it is an explicit trust decision -- see RUNBOOK.md.
-	dnf -y install --nogpgcheck "$freeurl" "$nonfreeurl" >>"$logfile" 2>&1 || {
+	# shellcheck disable=SC2086 # deliberate word splitting: one or two URLs
+	dnf -y install --nogpgcheck $repourls >>"$logfile" 2>&1 || {
 		notework "RPM Fusion (could not enable; full ffmpeg codecs unavailable)"
 		return 1
 	}
@@ -694,20 +717,31 @@ putgitrepo() {
 	[ -d "$src/.config" ] ||
 		error "No .config directory in ${dotfilesdir:-the repository root}. If the installer and the dotfiles share one repository, pass the dotfiles subdirectory with -d (for example: -d voidrice)."
 
+	# Validate the clone before it touches $HOME, not after.
+	checksymlinks "$src"
+
 	sudo -u "$name" -H cp -rfT "$src" "$2" ||
 		error "Could not copy the dotfiles into $2."
 	rm -rf "$dir"
 }
 
-# The five dotfiles git stores as symlinks are the whole session entry path. If
-# the repo was ever committed from a Windows checkout without core.symlinks,
-# they arrive as plain text files and the user logs in to a bare shell with no
-# explanation anywhere.
+# The six dotfiles git stores as symlinks are the whole session entry path. If
+# the repo was ever committed from a Windows checkout without core.symlinks, or
+# copied through exFAT/NTFS, they arrive as plain text files and the user logs
+# in to a bare shell with no explanation anywhere.
+#
+# Takes the staging clone as its argument and is called before anything is
+# copied into $HOME. It used to run afterwards, which meant a bad repo aborted
+# the install with every package and dotfile in place but no sudoers rules, no
+# touchpad config and no services -- and finalize never reached. Failing here
+# leaves the home directory untouched instead.
 checksymlinks() {
-	for f in .zprofile .xprofile .xinitrc .gtkrc-2.0; do
-		[ -e "/home/$name/$f" ] || continue
-		[ -L "/home/$name/$f" ] && continue
-		error "/home/$name/$f is a regular file but must be a symlink. The dotfiles repo was committed from a checkout without core.symlinks. Fix it in the repo (git ls-files -s should show mode 120000) and re-run."
+	for f in .zprofile .xprofile .xinitrc .gtkrc-2.0 .config/sxiv .local/share/bg; do
+		# -L first: a symlink whose target is missing is still a symlink, and
+		# testing -e would skip it.
+		[ -L "$1/$f" ] && continue
+		[ -e "$1/$f" ] || continue
+		error "$f in the dotfiles repo is a regular file but must be a symlink. The repo was committed from a checkout without core.symlinks, or staged through a filesystem that cannot store them. Fix it in the repo (git ls-files -s should show mode 120000) and re-run."
 	done
 }
 
@@ -845,7 +879,6 @@ relabel
 putgitrepo "$dotfilesrepo" "/home/$name" "$repobranch"
 rm -rf "/home/$name/.git/" "/home/$name/README.md" "/home/$name/LICENSE" \
 	"/home/$name/FUNDING.yml" "/home/$name/.gitattributes" "/home/$name/.gitmodules"
-checksymlinks
 
 vimplugininstall
 
@@ -896,7 +929,12 @@ TOUCHPAD
 librewolfpolicies
 librewolfprofile
 
-newperms 01-larbs-cmds-without-password "%wheel ALL=(ALL:ALL) NOPASSWD: /usr/sbin/shutdown,/usr/sbin/reboot,/usr/sbin/poweroff,/usr/bin/systemctl suspend,/usr/bin/systemctl hibernate,/usr/bin/mount,/usr/bin/umount,/usr/bin/loadkeys,/usr/bin/dnf upgrade --downloadonly -y,/usr/bin/dnf -y upgrade"
+# These are /usr/bin, not /usr/sbin. Fedora finished the /usr merge in 42:
+# /usr/sbin is now a symlink to bin, a user's PATH contains /usr/bin, and sudo
+# matches the resolved command path literally without canonicalising symlinked
+# directories. Spelling these /usr/sbin/... made every one of them dead, and
+# the only symptom was an unexpected password prompt.
+newperms 01-larbs-cmds-without-password "%wheel ALL=(ALL:ALL) NOPASSWD: /usr/bin/shutdown,/usr/bin/reboot,/usr/bin/poweroff,/usr/bin/systemctl suspend,/usr/bin/systemctl hibernate,/usr/bin/mount,/usr/bin/umount,/usr/bin/loadkeys,/usr/bin/dnf upgrade --downloadonly -y,/usr/bin/dnf -y upgrade"
 newperms 02-larbs-visudo-editor "Defaults editor=/usr/bin/nvim"
 
 # The filename must end in .conf or systemd-sysctl silently ignores it. Fedora
