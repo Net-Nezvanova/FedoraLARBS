@@ -348,6 +348,50 @@ patchsource() {
 		# is what actually works, and progs.csv installs it.
 		sed -i 's/"xbacklight", "-inc", "15"/"brightnessctl", "set", "15%+"/;
 		        s/"xbacklight", "-dec", "15"/"brightnessctl", "set", "15%-"/' config.h
+		# Every status bar icon renders as blank space with the stock font list.
+		# Fedora's google-noto-color-emoji-fonts ships only Noto-COLRv1.ttf, and
+		# FreeType composites just COLRv0 and the bitmap colour formats -- handed
+		# a COLRv1 face it draws the empty base outline. ":color=false" is
+		# load-bearing and not redundant with naming the monochrome family:
+		# fontconfig resolves a bare "Noto Emoji" straight back to the COLRv1
+		# file, so the family name alone changes nothing.
+		sed -i 's/NotoColorEmoji:\([^"]*\)/Noto Emoji:\1:color=false/' config.h
+		# Upstream points both normfgcolor and selbgcolor at color4, which is a
+		# legibility bug on any low-saturation wallpaper: pywal fills color1-6
+		# with mid-tones sampled from the image, so color4 on color0 can land
+		# near 3:1, below WCAG AA. color7 is pywal's designated light-foreground
+		# slot for every image and is reliably the strongest choice against
+		# color0. color6 is conventionally cyan and tends brighter than color4 --
+		# a tendency, not a guarantee, but it fixes the title bar and the focused
+		# border, and lightening their text instead measures worse.
+		sed -i 's/"color4"\(.*&normfgcolor\)/"color7"\1/;
+		        s/"color4"\(.*&selbgcolor\)/"color6"\1/;
+		        s/"color8"\(.*&selbordercolor\)/"color6"\1/' config.h
+		# Bind the Bluetooth menu to the Mod+Shift+B placeholder upstream leaves
+		# commented out. bluez has no front end of its own worth shipping here:
+		# bluetuith is not packaged for Fedora, and blueman's tray applet needs a
+		# systray patch this dwm does not carry.
+		sed -i '/XK_b,.*SHCMD("")/s%.*%\t{ MODKEY|ShiftMask,\t\tXK_b,          spawn,                  SHCMD("dmenubluetooth") },%' config.h
+		# ...and document it in the Mod+F1 manual, beside the other connectivity
+		# entry. The manual writes shifted keys as capitals.
+		[ -f larbs.mom ] && sed -i '/nmtui (for connecting to wireless internet)/a\.ITEM\n\\f(CWMod+B\\fP \\(en Bluetooth menu (pair/connect devices)' larbs.mom
+		;;
+	dmenu)
+		[ -f config.h ] || return 0
+		# Same COLRv1 problem as dwm; without this, dmenuunicode lists blank rows.
+		sed -i 's/NotoColorEmoji:\([^"]*\)/Noto Emoji:\1:color=false/' config.h
+		;;
+	st)
+		# Same COLRv1 problem again, in both places st can pick a font. config.h
+		# covers the configured fallback list.
+		[ ! -f config.h ] || sed -i 's/NotoColorEmoji:\([^"]*\)/Noto Emoji:\1:color=false/' config.h
+		# x.c covers the separate runtime path that hunts the whole system for a
+		# glyph missing from both configured fonts. That pattern is built in code
+		# with no user input, so there is nothing to carry a ":color=false"
+		# through and the bool has to be set directly -- exactly as dwm's drw.c
+		# already does in its own fallback. Anchored on "fcpattern" so it cannot
+		# hit the unrelated "pattern" call in xloadfonts.
+		[ ! -f x.c ] || sed -i 's/\(FcPatternAddBool(fcpattern, FC_SCALABLE, 1);\)/\1\n\t\t\tFcPatternAddBool(fcpattern, FC_COLOR, FcFalse);/' x.c
 		;;
 	dwmblocks)
 		[ -f config.h ] || [ ! -f config.def.h ] || cp config.def.h config.h
