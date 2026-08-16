@@ -265,6 +265,96 @@ window manager.
    and broke the ffmpeg swap — despite full ffmpeg living in free and nothing
    here needing nonfree at all.
 
+### Fixed once the system was in daily use
+
+Faults that only appear when someone actually looks at the bar, changes a
+wallpaper, or reaches for a feature. Suckless changes are `sed` edits in
+`patchsource()`, because the three programs are cloned from upstream and there
+is no fork to hold them; script and config changes are in the dotfiles repo.
+
+1. **Every status bar icon rendered as blank space.** Fedora's
+   `google-noto-color-emoji-fonts` ships only `Noto-COLRv1.ttf`. FreeType
+   composites COLRv0 and the bitmap colour formats but not COLRv1, so handed
+   that face it draws the empty base outline — numbers appeared, icons did not.
+   `progs.csv` already installed the monochrome font and dwm's `drw.c` already
+   refused colour fonts in its *fallback* path; what was missing is that the
+   *configured* font list still named `NotoColorEmoji` outright, and a
+   configured font never reaches the fallback. Fixed in dwm, dmenu and st.
+
+   `:color=false` is load-bearing and is not redundant with naming the
+   monochrome family. `fc-match "Noto Emoji"` resolves straight back to the
+   COLRv1 file, so the family name alone changes nothing — this was confirmed
+   through `XftFontOpenName`, the same call dwm makes, before being relied on.
+
+2. **st needed a second, separate fix.** Beyond the configured list, `x.c` has
+   its own runtime path that searches every installed font for a glyph missing
+   from both configured fonts, and it had no colour rejection at all — so it
+   could pull the COLRv1 face back in regardless of config. It now sets
+   `FC_COLOR`/`FcFalse` on that pattern, as dwm's `drw.c` already does. The
+   `sed` is anchored on `fcpattern` so it cannot hit the unrelated `pattern`
+   call in `xloadfonts`.
+
+3. **The theme depended on who won a startup race.** dwm reads its colours from
+   the X resource database exactly once at startup, and the pywal run inside
+   `setbg` is what puts them there. `xprofile` backgrounded `setbg` and
+   `xinitrc` execs dwm the moment `xprofile` returns; wal takes about a second,
+   so dwm reliably came up with compiled-in colours and then switched to the
+   wallpaper's palette on the next restart or `Mod+F5`. `xprofile` now waits.
+
+4. **The bar failed WCAG AA on any low-saturation wallpaper.** Upstream points
+   both `normfgcolor` and `selbgcolor` at `color4`, which pywal fills with a
+   mid-tone sampled from the image. Measured on a muted wallpaper, `color4`
+   `#3B7683` on `color0` `#191c2f` is **3.29:1** — status text and window title
+   both. `normfgcolor` now takes `color7`, pywal's designated light-foreground
+   slot for every image, measuring **9.86:1**. `selbgcolor` and
+   `selbordercolor` take `color6`, giving **5.31:1** and a focused-window
+   border that matches the highlighted title naming it. Note that lightening
+   the title *text* instead is not the fix: `color7` on `color4` measures
+   3.00:1, worse, because a mid-tone accent contrasts poorly in both
+   directions — the accent itself has to move.
+
+5. **The wifi indicator was permanently blank.** `sb-internet` read link
+   quality from `/proc/net/wireless`, part of the Wireless Extensions API the
+   kernel dropped in favour of nl80211. The `awk` matched nothing, so the block
+   rendered as a bare ethernet ❎ — indistinguishable from being offline while
+   the wifi was up. It now uses `iw`, which reads from the driver in about 2ms
+   against ~22ms for the `nmcli` equivalent and does not require
+   NetworkManager; `nmcli` remains a fallback. Signal arrives in dBm rather
+   than the old 0–70 scale, so it is mapped linearly and clamped. Adds `iw` to
+   `progs.csv`.
+
+6. **There was no Bluetooth front end at all.** The stack works — `bluez`,
+   an nl80211-era adapter and PipeWire's bluez5 codecs including LDAC — but
+   nothing drove it. Nothing packaged fits either: `bluetuith` is not in
+   Fedora's repos, and blueman's tray applet needs a systray patch this dwm
+   does not carry. `dmenubluetooth` drives `bluetoothctl` directly, bound to
+   `Mod+Shift+B` (the placeholder upstream leaves commented out) and documented
+   in the `Mod+F1` manual. Adds `bluez` to `progs.csv`.
+
+   Pairing runs in a floating terminal rather than silently: it is the one
+   operation that can demand a passkey or a confirmation, and those prompts
+   have to be answerable. `rfkill` is checked first, because a blocked adapter
+   makes every `bluetoothctl` call fail as though no device existed.
+
+7. **`Mod+F1` — the LARBS manual — did nothing.** It pipes `groff -Tpdf` into
+   zathura, but Fedora splits `gropdf` and the `devpdf` font files out of
+   `groff` into `groff-perl`, which nothing installed. `-Tps` worked, `-Tpdf`
+   died with `cannot load 'DESC' description file for device 'pdf'`, and the
+   keybinding failed silently. Adds `groff-perl` to `progs.csv`.
+
+8. **The clock was 12-hour.** Now `%H:%M`. The icon still derives from `%I`,
+   because there are only twelve clock-face emoji and it tracks the 12-hour
+   position regardless of how the time is printed.
+
+Not fixed, and deliberately so: the fingerprint reader. The T480s ships a
+Synaptics `06cb:009a`, and `libfprint` 1.94 does not support it — its
+compiled device table carries 33 Synaptics IDs from `0x00bd` to `0x01a4`, and
+`0x009a` falls below the entire range, so `fprintd` would install and report no
+device. The only route is the third-party `python-validity`, which is not
+packaged for Fedora. It would also not unlock the screen: `slock` links
+`libcrypt` and not `libpam`, so it reads the shadow hash directly and has no
+PAM path for fingerprint to enter through.
+
 ---
 
 ## 7. Post-install checklist
