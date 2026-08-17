@@ -106,6 +106,7 @@ exposes:
 | Wifi indicator permanently blank | `/proc/net/wireless` was removed with Wireless Extensions |
 | No Bluetooth anything | the stack works; nothing drove it, and nothing packaged fits |
 | `Mod+F1` silently did nothing | Fedora splits `gropdf` into `groff-perl` |
+| Everything tiny on a laptop panel | DPI pinned at 96, and upstream's fonts mix `size=` with `pixelsize=` so it cannot just be raised |
 
 ---
 

@@ -356,6 +356,14 @@ patchsource() {
 		# fontconfig resolves a bare "Noto Emoji" straight back to the COLRv1
 		# file, so the family name alone changes nothing.
 		sed -i 's/NotoColorEmoji:\([^"]*\)/Noto Emoji:\1:color=false/' config.h
+		# Put the emoji fallback in points so it tracks the DPI with the text
+		# beside it. Upstream's fonts[] mixes units -- "monospace:size=10" is
+		# points and the emoji entry is pixels -- and a pixel-pinned font is
+		# DPI-independent by definition, so on a real 158 DPI panel the bar text
+		# grows 1.65x while every icon stays put. 7.5 is upstream's pixelsize=10
+		# measured against a 13.33px rendering of size=10 at 96 DPI, so nothing
+		# moves until xprofile's dpi file says it should.
+		sed -i 's/\(Noto Emoji\):pixelsize=10/\1:size=7.5/' config.h
 		# Upstream points both normfgcolor and selbgcolor at color4, which is a
 		# legibility bug on any low-saturation wallpaper: pywal fills color1-6
 		# with mid-tones sampled from the image, so color4 on color0 can land
@@ -389,11 +397,21 @@ patchsource() {
 		[ -f config.h ] || return 0
 		# Same COLRv1 problem as dwm; without this, dmenuunicode lists blank rows.
 		sed -i 's/NotoColorEmoji:\([^"]*\)/Noto Emoji:\1:color=false/' config.h
+		# ...and the same mixed-units problem. 6 is upstream's pixelsize=8
+		# against the 13.33px size=10 beside it. See the dwm case above.
+		sed -i 's/\(Noto Emoji\):pixelsize=8/\1:size=6/' config.h
 		;;
 	st)
 		# Same COLRv1 problem again, in both places st can pick a font. config.h
 		# covers the configured fallback list.
 		[ ! -f config.h ] || sed -i 's/NotoColorEmoji:\([^"]*\)/Noto Emoji:\1:color=false/' config.h
+		# Both st fonts to points, same reasoning as dwm and dmenu -- st is the
+		# worse case because upstream pins the *body* text in pixels, so raising
+		# the DPI would grow the bar and dmenu and leave the terminal alone.
+		# 9 is exactly pixelsize=12 at 96 DPI (12 * 72/96) and 7.5 is the emoji
+		# entry against it, so the conversion is a no-op until the DPI changes.
+		[ ! -f config.h ] || sed -i 's/mono:pixelsize=12/mono:size=9/;
+		                             s/\(Noto Emoji\):pixelsize=10/\1:size=7.5/' config.h
 		# x.c covers the separate runtime path that hunts the whole system for a
 		# glyph missing from both configured fonts. That pattern is built in code
 		# with no user input, so there is nothing to carry a ":color=false"

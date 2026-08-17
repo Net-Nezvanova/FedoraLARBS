@@ -401,6 +401,57 @@ is no fork to hold them; script and config changes are in the dotfiles repo.
    reversed. Read `selbordercolor` out of the image instead and label from
    that.
 
+10. **DPI was pinned at 96 on a 158 DPI panel, and could not simply be
+    unpinned.** `xprofile` already read `~/.config/x11/dpi` and fell back to
+    96, but the file does not exist by default, so X reported a fabricated
+    508×285 mm screen — 96.0 DPI — against a real 309×173 mm panel measuring
+    **157.9 × 158.6 DPI**. Everything rendered at 61% of its intended physical
+    size.
+
+    Dropping `158` into that file was not enough, because upstream's font
+    stacks **mix units**, and only one of them responds to DPI:
+
+    | | upstream | unit | @96 | @158 |
+    |---|---|---|---|---|
+    | dwm text | `monospace:size=10` | points | 13.3px | 21.9px |
+    | dwm emoji | `NotoColorEmoji:pixelsize=10` | pixels | 10px | 10px |
+    | dmenu text | `monospace:size=10` | points | 13.3px | 21.9px |
+    | dmenu emoji | `NotoColorEmoji:pixelsize=8` | pixels | 8px | 8px |
+    | st text | `mono:pixelsize=12` | pixels | 12px | 12px |
+    | st emoji | `NotoColorEmoji:pixelsize=10` | pixels | 10px | 10px |
+
+    A font given in pixels is DPI-independent by definition. Raising the DPI
+    would therefore have grown the bar and dmenu by 1.65× while every status
+    bar icon stayed put and the terminal did not move at all. `patchsource()`
+    now converts all six to points, preserving upstream's ratios exactly —
+    `pixelsize=10` against a 13.33px rendering of `size=10` is 0.75, hence
+    `size=7.5`; likewise `pixelsize=8` → `size=6` and st's `pixelsize=12` →
+    `size=9` (12 × 72/96). **The conversion is a no-op at 96 DPI**, so a fork
+    that never creates the `dpi` file sees no change at all.
+
+    `xprofile` also needs two settings, not one. `xrandr --dpi` rewrites the
+    physical size the X screen reports, which is what Xft falls back to when
+    sizing a point-specified font — that covers dwm, dmenu and st. GTK and
+    Firefox/Zen ignore it and read the `Xft.dpi` resource instead, so with only
+    the `xrandr` call the desktop scales and the browser does not. Both now
+    derive from the same file so they cannot drift.
+
+    Note that `xrdb -merge` here reads from stdin, not from
+    `~/.config/x11/xresources`. That file must stay unloaded: it carries a
+    stock `*.alpha: 0.8` and a gruvbox palette that would override both the st
+    transparency above and pywal's colours.
+
+    Two things deliberately left alone. `dmenupass` passes `-fn Monospace-18`,
+    which is already in points and scales with everything else, keeping its
+    1.8× ratio to normal dmenu. And GTK3 only scales *fonts* from `Xft.dpi` —
+    widget and icon geometry follow `GDK_SCALE`, which is integer-only and
+    would jump straight to 2×. GTK apps therefore get correctly sized text in
+    slightly tight chrome, which is the better of the two available failures.
+
+    `~/.config/x11/dpi` lives in the dotfiles repo and is the one genuinely
+    machine-specific file in it. A fork running on a different panel should
+    change the number or delete the file.
+
 Not fixed, and deliberately so: the fingerprint reader. The T480s ships a
 Synaptics `06cb:009a`, and `libfprint` 1.94 does not support it — its
 compiled device table carries 33 Synaptics IDs from `0x00bd` to `0x01a4`, and
