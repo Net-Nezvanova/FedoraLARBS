@@ -448,6 +448,29 @@ is no fork to hold them; script and config changes are in the dotfiles repo.
     would jump straight to 2×. GTK apps therefore get correctly sized text in
     slightly tight chrome, which is the better of the two available failures.
 
+    **The shipped value is 116, not the panel's true 158.** Correct is not the
+    same as comfortable. What the DPI actually trades is glyph size against how
+    much fits on screen, and at a physically accurate 158 the grid pays too
+    much. Measured at each setting on the machine, in a half-width st frame:
+
+    | DPI | scale | bar text | st text | st grid | bar height |
+    |---|---|---|---|---|---|
+    | 96 (upstream) | 1.00× | 13.3px | 12.0px | 143×60 | 31px |
+    | **116 (shipped)** | **1.21×** | **16.1px** | **14.5px** | **111×48** | **35px** |
+    | 132 | 1.375× | 18.3px | 16.5px | 100×44 | 38px |
+    | 158 (physically true) | 1.65× | 21.9px | 19.8px | 83×36 | 43px |
+
+    158 leaves 36 rows, which is too few to work in. 116 is the mildest setting
+    that still reads as changed, and keeps a terminal wide enough for a
+    side-by-side diff. Anyone who wants true physical sizing should write 158;
+    the machinery is identical either way and only the one number changes.
+
+    Measure this rather than deriving it from font metrics. A first pass here
+    computed the 96 baseline as ~126×72 from advance widths and both figures
+    were wrong — st rounds the cell up with `ceilf` and adds `borderpx`, and
+    the bar height comes from the font's ascent plus descent plus padding, not
+    from its pixelsize. Run `stty size` inside a real window instead.
+
     `~/.config/x11/dpi` lives in the dotfiles repo and is the one genuinely
     machine-specific file in it. A fork running on a different panel should
     change the number or delete the file.
