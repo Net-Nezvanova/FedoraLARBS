@@ -114,6 +114,7 @@
 ,pipewire-pulseaudio,"provides the PulseAudio interface on top of pipewire."
 ,wireplumber,"is the pipewire session manager and provides wpctl."
 ,mpv,"is the video player."
+,policycoreutils-python-utils,"provides semanage, which relabel() needs to stop mpd transitioning into the mpd_t SELinux domain. Without it mpd never starts on any install of this port and reports nothing that would tell you why -- see RUNBOOK 6.14. Fedora does not ship it in @core and nothing else here pulls it in."
 ,mpd,"is the music daemon that plays in the background."
 ,mpc,"is the minimal command-line controller for mpd."
 ,ncmpcpp,"is the full terminal interface for mpd."

@@ -842,6 +842,29 @@ vimplugininstall() {
 relabel() {
 	command -v restorecon >/dev/null 2>&1 || return 0
 	restorecon -RF /usr/local/bin /usr/local/share >>"$logfile" 2>&1
+
+	# mpd ships labelled mpd_exec_t, so starting it from xprofile makes
+	# unconfined_t transition into mpd_t -- a domain written for a system
+	# daemon serving /var/lib/mpd. mpd_t cannot read ~/.config/mpd/mpd.conf,
+	# so mpd silently falls back to /etc/mpd.conf and then dies trying to
+	# setgid to the packaged mpd group. Nothing surfaces anywhere anyone
+	# looks: `pidof mpd` is simply empty, and mpc and ncmpcpp report a
+	# refused connection exactly as though the daemon were merely off. Every
+	# install of this port had a dead mpd until this was found.
+	#
+	# setsebool mpd_enable_homedirs is NOT the fix. It covers user_home_t and
+	# ~/.config is config_home_t, and even past the config file mpd_t still
+	# cannot reach pipewire's socket under /run/user. Labelling the binary as
+	# an ordinary one stops the transition instead, so mpd runs in the
+	# caller's domain like mpv, ncmpcpp, st and everything else here. That
+	# gives up confinement built for a network-facing system service and
+	# buys nothing this desktop does not already do without.
+	if command -v semanage >/dev/null 2>&1; then
+		semanage fcontext -a -t bin_t "/usr/bin/mpd" >>"$logfile" 2>&1
+		restorecon -v /usr/bin/mpd >>"$logfile" 2>&1
+	else
+		notework "policycoreutils-python-utils (mpd will not start; see RUNBOOK 6.14)"
+	fi
 	return 0
 }
 
@@ -963,7 +986,12 @@ rm -rf "/home/$name/.git/" "/home/$name/README.md" "/home/$name/LICENSE" \
 
 vimplugininstall
 
-sudo -u "$name" -H mkdir -p "/home/$name/.cache/zsh" \
+# .cache/mpd is not upstream's. mpd 0.24 defaults its database to
+# $XDG_CACHE_HOME/mpd/db and does not create the directory, so without this it
+# starts, listens, and then throws "Failed to open .../db: No such file or
+# directory" on the first update -- a music player that never finds any music.
+# .local/share/mpd is where older mpd put it and is kept for the state file.
+sudo -u "$name" -H mkdir -p "/home/$name/.cache/zsh" "/home/$name/.cache/mpd" \
 	"/home/$name/.config/mpd/playlists" "/home/$name/.local/share/mpd"
 
 # The XDG user directories. Upstream's user-dirs.dirs lists only

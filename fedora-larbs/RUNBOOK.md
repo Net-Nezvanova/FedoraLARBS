@@ -586,6 +586,59 @@ is no fork to hold them; script and config changes are in the dotfiles repo.
     `transadd`, `td-toggle` and the magnet handler each bring it up on demand,
     and `xprofile` deliberately does not list it.
 
+14. **mpd had never started, on any install of this port, and said nothing.**
+    Found while creating `~/Music` for it. The missing directory was not the
+    problem.
+
+    `/usr/bin/mpd` is labelled `mpd_exec_t`, so starting it from `xprofile`
+    makes `unconfined_t` transition into `mpd_t` — a domain written for a
+    *system* mpd serving `/var/lib/mpd`. `mpd_t` cannot read
+    `~/.config/mpd/mpd.conf`, so mpd falls back to `/etc/mpd.conf` and then
+    dies trying to `setgid` to the packaged `mpd` group, which a normal user
+    may not do. Arch has no SELinux by default, so upstream never met this.
+
+    It fails where nobody looks. `pidof mpd` is simply empty, and `mpc` and
+    ncmpcpp report a refused connection exactly as though you had not started
+    the daemon. The giveaway is the bind address: the dotfiles' `mpd.conf` says
+    `bind_to_address "127.0.0.1"`, so an mpd listening on `0.0.0.0:6600` is one
+    that read `/etc/mpd.conf` instead.
+
+    ```sh
+    ausearch -m avc -ts recent | grep mpd    # denials on config_home_t
+    mpd --no-daemon --stderr ~/.config/mpd/mpd.conf   # "Permission denied"
+    ```
+
+    `setsebool -P mpd_enable_homedirs on` is **not** the fix, though it looks
+    like it: it covers `user_home_t` and `~/.config` is `config_home_t`. Past
+    the config file, `mpd_t` still cannot reach pipewire's socket under
+    `/run/user`, so audio would fail even once it read its configuration.
+    Chasing it that way means fixing three types and keeping up with a fourth.
+
+    `relabel()` now labels the binary as an ordinary one, which stops the
+    transition, so mpd runs in the caller's domain like mpv, ncmpcpp, st and
+    everything else on this desktop:
+
+    ```sh
+    semanage fcontext -a -t bin_t /usr/bin/mpd
+    restorecon -v /usr/bin/mpd
+    ```
+
+    That gives up confinement designed for a network-facing system service and
+    buys nothing here that dwm and the browser do not already do without.
+    `semanage` comes from `policycoreutils-python-utils`, now in `progs.csv`;
+    if it is missing the installer says so rather than leaving a silent
+    failure. Verify by playing something, not by `pidof` — mpd will run happily
+    having read the wrong config:
+
+    ```sh
+    ss -lnp | grep 6600     # must be 127.0.0.1, not 0.0.0.0
+    mpc status              # must reach [playing], not just print volume
+    ```
+
+    One more directory was missing behind it: mpd 0.24 defaults its database to
+    `$XDG_CACHE_HOME/mpd/db` and does not create the parent, so it starts,
+    listens, and throws `Failed to open .../db` at the first update.
+
 Not fixed, and deliberately so: the fingerprint reader. The T480s ships a
 Synaptics `06cb:009a`, and `libfprint` 1.94 does not support it — its
 compiled device table carries 33 Synaptics IDs from `0x00bd` to `0x01a4`, and
@@ -738,42 +791,6 @@ tar caf ~/dotfiles-backup-$(date +%F).tar.gz ~/.config ~/.local/bin
   `~/.local/share/larbs/chars/emoji`. If your country's spelling differs there,
   the flag is blank. This replaced `geoiplookup`, whose Fedora data has been
   frozen since 2018 and would have answered confidently and wrongly.
-- **mpd cannot start as a session daemon under SELinux, and fails silently.**
-  Diagnosed, not yet fixed. `/usr/bin/mpd` is labelled `mpd_exec_t`, so running
-  it from `xprofile` makes `unconfined_t` transition into `mpd_t` — a domain
-  written for a *system* mpd serving `/var/lib/mpd`. That domain cannot read
-  `~/.config/mpd/mpd.conf`, so mpd silently falls back to `/etc/mpd.conf`, then
-  dies trying to `setgid` to the packaged `mpd` group, which a normal user may
-  not do. Nothing is logged where anyone would look: `pidof mpd` is simply
-  empty, and `mpc` and ncmpcpp report a refused connection as though the daemon
-  were merely off. This affects **every** install of this port; mpd has never
-  run on one.
-
-  ```sh
-  ausearch -m avc -ts recent | grep mpd     # denials on config_home_t
-  mpd --no-daemon --stderr ~/.config/mpd/mpd.conf   # "Permission denied"
-  ```
-
-  `setsebool -P mpd_enable_homedirs on` is necessary but **not sufficient** —
-  it covers `user_home_t`, and `~/.config` is `config_home_t`, which it does
-  not. Past that, `mpd_t` still cannot reach pipewire's socket in
-  `/run/user/1000` (`user_tmp_t`), so audio output would fail even with the
-  config read. Chasing it with relabels means fixing three types.
-
-  The fix that matches how this desktop actually works is to stop the domain
-  transition, so mpd runs as `unconfined_t` like mpv, ncmpcpp, st and every
-  other program here:
-
-  ```sh
-  sudo semanage fcontext -a -t bin_t /usr/bin/mpd
-  sudo restorecon -v /usr/bin/mpd
-  ```
-
-  This gives up SELinux confinement on mpd. That confinement was designed for a
-  network-facing system service, and here it buys nothing that dwm and Zen do
-  not already do without — but it is a real policy change on an enforcing
-  system, so it is written down rather than run by `fedora.sh`.
-
 - **`sent` and `pass` are not installed.** `compiler`, `opout` and `otp`
   reference them; those code paths are guarded by `ifinstalled` and simply do
   nothing. Add them to `progs.csv` if you want them.

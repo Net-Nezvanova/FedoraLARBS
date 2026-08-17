@@ -110,7 +110,7 @@ exposes:
 | Korean tofu, Chinese and Japanese fine | no CJK font installed at all; the accidental dependency covering Han and kana has no Hangul |
 | A bare home directory, screenshots landing in it | nothing ever created the XDG folders, and `maimpick` passes `maim` a relative filename |
 | Torrents crawl; `transmission-remote -pt` says the port is shut | firewalld blocks 51413, which Arch never had to open |
-| `mpd` and `ncmpcpp` act as if the daemon is off | SELinux transitions mpd into a system-service domain that cannot read `~/.config` — see §11, not yet fixed |
+| `mpd` and `ncmpcpp` act as if the daemon is off | SELinux transitioned mpd into a system-service domain that cannot read `~/.config`, so it read `/etc/mpd.conf` and died silently |
 
 ---
 
