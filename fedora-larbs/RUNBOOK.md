@@ -306,12 +306,24 @@ is no fork to hold them; script and config changes are in the dotfiles repo.
    mid-tone sampled from the image. Measured on a muted wallpaper, `color4`
    `#3B7683` on `color0` `#191c2f` is **3.29:1** — status text and window title
    both. `normfgcolor` now takes `color7`, pywal's designated light-foreground
-   slot for every image, measuring **9.86:1**. `selbgcolor` and
-   `selbordercolor` take `color6`, giving **5.31:1** and a focused-window
-   border that matches the highlighted title naming it. Note that lightening
-   the title *text* instead is not the fix: `color7` on `color4` measures
-   3.00:1, worse, because a mid-tone accent contrasts poorly in both
-   directions — the accent itself has to move.
+   slot for every image, measuring **9.86:1**. `selbgcolor` takes `color6`,
+   giving **5.31:1** for the title bar. Note that lightening the title *text*
+   instead is not the fix: `color7` on `color4` measures 3.00:1, worse, because
+   a mid-tone accent contrasts poorly in both directions — the accent itself
+   has to move.
+
+   `selbordercolor` takes `color7` as well. Upstream's `color8` is pywal's
+   "bright black", grey by construction — `#64687b` here, **3.05:1** against
+   the unfocused border, so the focused window barely stood out. `color6` was
+   tried first and measured 5.31:1, but it only *tends* to be bright: `color1`
+   through `color6` are image samples and a wallpaper can invert the ordering.
+   `color7` is the slot pywal reserves for the light foreground, so it is near
+   10:1 on any image. The trade is that focus is no longer one teal signal —
+   the title bar stays `color6` while the border goes near-white. That is
+   acceptable because `normbordercolor` is `color0`, identical to the root
+   background: an unfocused window shows no border at all, so there is nothing
+   for a bright one to clash with, and the border is the only focus cue left
+   when the bar is hidden or a float sits over another tag's title.
 
 5. **The wifi indicator was permanently blank.** `sb-internet` read link
    quality from `/proc/net/wireless`, part of the Wireless Extensions API the
@@ -345,6 +357,49 @@ is no fork to hold them; script and config changes are in the dotfiles repo.
 8. **The clock was 12-hour.** Now `%H:%M`. The icon still derives from `%I`,
    because there are only twelve clock-face emoji and it tracks the 12-hour
    position regardless of how the time is printed.
+
+9. **st's transparency was on but invisible.** Not a bug — upstream's
+   `alpha = 0.8` composites correctly (the alpha patch is in the fork, `x.c`
+   requests a 32-bit ARGB visual, and `xprofile` starts `xcompmgr`), it is just
+   too near opaque to read as an effect. Sampling the framebuffer inside an st
+   window returned `#22263D`/`#31364D` rather than a flat `color0` `#191c2f`,
+   confirming the pipeline worked before any change. Now `0.75`, with
+   `alphaOffset = 0.1` so an unfocused terminal fades a further step into the
+   wallpaper — a second focus cue alongside the border above, and free, since
+   the compositor is already running. `Alt+a`/`Alt+s` adjust the running
+   instance in 0.05 steps; both values are also readable from Xresources as
+   `alpha` and `alphaOffset`.
+
+   Anchor these seds on the identifiers, not on `0.8`/`0.0`. An upstream
+   default change would otherwise skip the edit silently and st would come back
+   opaque with nothing in the log to say why.
+
+   **The blend is additive, which is worth knowing before turning alpha down
+   further.** XRender source colours are premultiplied, and `xloadalpha` sets
+   `dc.col[defaultbg].color.alpha` without scaling the RGB to match, so the
+   composite is not `α·bg + (1−α)·wallpaper` but
+
+   ```
+   result = bg + (1 − α) · wallpaper
+   ```
+
+   The background is only ever *added to*. Verified against the framebuffer at
+   five coordinates, comparing a focused and an unfocused st over a known
+   wallpaper — every channel landed within one 8-bit step of that formula and
+   several were exact. Over a dark wallpaper it is indistinguishable from
+   normal blending; over a bright one the terminal background rises instead of
+   staying put. On the brightest region of the sample wallpaper (`#E3DCCC`) the
+   focused background reaches `#525362` and `color7` text on it measures
+   **4.44:1** — essentially at the AA line — and an unfocused window reaches
+   `#686976` and **3.18:1**. Both are acceptable at these values, and unfocused
+   text is not being read, but the margin is why alpha stops at 0.75 rather
+   than going lower.
+
+   Diagnosing this needs the border as ground truth. `xdotool windowfocus` does
+   not reliably move dwm's focus — dwm re-asserts its own selected client — so
+   a screenshot pair labelled from the xdotool calls alone can come out
+   reversed. Read `selbordercolor` out of the image instead and label from
+   that.
 
 Not fixed, and deliberately so: the fingerprint reader. The T480s ships a
 Synaptics `06cb:009a`, and `libfprint` 1.94 does not support it — its

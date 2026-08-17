@@ -362,11 +362,20 @@ patchsource() {
 		# near 3:1, below WCAG AA. color7 is pywal's designated light-foreground
 		# slot for every image and is reliably the strongest choice against
 		# color0. color6 is conventionally cyan and tends brighter than color4 --
-		# a tendency, not a guarantee, but it fixes the title bar and the focused
-		# border, and lightening their text instead measures worse.
+		# a tendency, not a guarantee, but it fixes the title bar, and
+		# lightening the title text instead measures worse.
+		#
+		# selbordercolor also goes to color7, not color6. Upstream's color8 is
+		# "bright black", grey by construction and around 3:1 against the
+		# unfocused border. color6 lifts that to roughly 5:1 but inherits the
+		# same tendency-not-guarantee caveat; color7 is near 10:1 on any
+		# wallpaper. It breaks the colour pairing with the title bar, which is
+		# the point -- normbordercolor is color0, identical to the root
+		# background, so an unfocused window shows no border and a bright one
+		# has nothing to clash with.
 		sed -i 's/"color4"\(.*&normfgcolor\)/"color7"\1/;
 		        s/"color4"\(.*&selbgcolor\)/"color6"\1/;
-		        s/"color8"\(.*&selbordercolor\)/"color6"\1/' config.h
+		        s/"color8"\(.*&selbordercolor\)/"color7"\1/' config.h
 		# Bind the Bluetooth menu to the Mod+Shift+B placeholder upstream leaves
 		# commented out. bluez has no front end of its own worth shipping here:
 		# bluetuith is not packaged for Fedora, and blueman's tray applet needs a
@@ -392,6 +401,16 @@ patchsource() {
 		# already does in its own fallback. Anchored on "fcpattern" so it cannot
 		# hit the unrelated "pattern" call in xloadfonts.
 		[ ! -f x.c ] || sed -i 's/\(FcPatternAddBool(fcpattern, FC_SCALABLE, 1);\)/\1\n\t\t\tFcPatternAddBool(fcpattern, FC_COLOR, FcFalse);/' x.c
+		# Background opacity. The alpha patch is already in this fork and the
+		# ARGB visual is already requested in x.c, so the only thing upstream's
+		# 0.8 needs is turning down far enough to be visible against a
+		# wallpaper. alphaOffset fades unfocused terminals a further 0.1, which
+		# is the cheapest focus cue there is. Both need the compositor xprofile
+		# starts; with no compositor running st is opaque and these are inert.
+		# Anchored on the identifiers rather than the values so an upstream
+		# default change does not silently skip the edit.
+		[ ! -f config.h ] || sed -i 's/^float alpha = .*/float alpha = 0.75;/;
+		                             s/^float alphaOffset = .*/float alphaOffset = 0.1;/' config.h
 		;;
 	dwmblocks)
 		[ -f config.h ] || [ ! -f config.def.h ] || cp config.def.h config.h

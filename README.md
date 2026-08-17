@@ -124,6 +124,7 @@ is Escape). The full list is `Mod+F1`.
 | `Mod+F5` | re-read Xresources (reload the palette) |
 | `Mod+Backspace` | lock, logout, reboot, shutdown |
 | `Alt+Shift+K` / `J` | terminal zoom in / out (`Alt+Shift+Home` resets) |
+| `Alt+a` / `Alt+s` | terminal transparency up / down |
 
 ---
 
