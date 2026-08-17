@@ -107,6 +107,7 @@ exposes:
 | No Bluetooth anything | the stack works; nothing drove it, and nothing packaged fits |
 | `Mod+F1` silently did nothing | Fedora splits `gropdf` into `groff-perl` |
 | Everything tiny on a laptop panel | DPI pinned at 96, and upstream's fonts mix `size=` with `pixelsize=` so it cannot just be raised |
+| Korean tofu, Chinese and Japanese fine | no CJK font installed at all; the accidental dependency covering Han and kana has no Hangul |
 
 ---
 

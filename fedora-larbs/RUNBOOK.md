@@ -475,6 +475,27 @@ is no fork to hold them; script and config changes are in the dotfiles repo.
     machine-specific file in it. A fork running on a different panel should
     change the number or delete the file.
 
+11. **Korean rendered as tofu while Chinese and Japanese worked.** The most
+    confusing possible failure mode, because it looks like a bug rather than a
+    missing font. Nothing in `progs.csv` installed a CJK face at all;
+    `google-droid-sans-fonts` arrives as somebody's transitive dependency and
+    its `DroidSansFallbackFull.ttf` covers Han and kana but carries **no
+    Hangul**, so `中文`, `日本語` and `ひらがな` all drew correctly while every
+    Korean syllable fell through to Libertinus Sans and came out an empty box.
+
+    Two Noto CJK variable fonts now cover it — `-mono-` for st, plain for Zen
+    and GTK. The `vf` builds are the same coverage as the static
+    `google-noto-sans-cjk-fonts` in a quarter of the space (31MB against
+    130MB), so there is no reason to take the large one. This also resolves Han
+    unification: Droid Sans Fallback has one set of Han glyphs for every
+    language, so `漢字` looked identical in Chinese and Japanese text when the
+    two are drawn differently in print.
+
+    Verify by rendering rather than by `fc-list`. A font can be listed, match a
+    charset query, and still be the wrong shape or the wrong metrics — running
+    the four scripts through a real st window and reading the screenshot is
+    what proves it, and it is how the Hangul gap was found in the first place.
+
 Not fixed, and deliberately so: the fingerprint reader. The T480s ships a
 Synaptics `06cb:009a`, and `libfprint` 1.94 does not support it — its
 compiled device table carries 33 Synaptics IDs from `0x00bd` to `0x01a4`, and

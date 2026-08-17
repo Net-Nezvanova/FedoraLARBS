@@ -61,6 +61,8 @@
 ,google-noto-sans-mono-fonts,"covers monospace glyphs that Dejavu lacks."
 ,google-noto-color-emoji-fonts,"renders colour emoji in the terminal."
 ,google-noto-emoji-fonts,"is the BLACK-AND-WHITE emoji font, and it is not optional. dwm's drw.c excludes colour fonts when searching for a fallback glyph (FcPatternAddBool FC_COLOR FcFalse), so with only the colour font installed every status bar icon silently renders as nothing while the numbers still show."
+,google-noto-sans-mono-cjk-vf-fonts,"is the monospace Chinese, Japanese and Korean face, and is what st falls back to for any CJK glyph. Nothing in the list above provides Hangul. google-droid-sans-fonts arrives as somebody's dependency and covers Han and kana, so Chinese and Japanese happen to render while every Korean syllable draws as an empty box -- a gap that looks like a bug rather than a missing font. The vf (variable font) build is identical coverage to google-noto-sans-cjk-fonts in a quarter of the space: 31MB against 130MB."
+,google-noto-sans-cjk-vf-fonts,"is the proportional counterpart, for Zen and GTK programs rather than the terminal. It also fixes Han unification: Droid Sans Fallback carries one set of Han glyphs for all languages, so the same character renders identically in Chinese and Japanese text when the two are genuinely drawn differently. Drop both rows if you never read CJK; they cost 62MB and nothing else depends on them."
 ,neovim,"is the text editor that everything defaults to."
 ,zsh-syntax-highlighting,"colours commands in the shell as you type them."
 ,man-db,"provides the manual page reader."
