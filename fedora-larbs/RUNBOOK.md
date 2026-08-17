@@ -496,6 +496,96 @@ is no fork to hold them; script and config changes are in the dotfiles repo.
     the four scripts through a real st window and reading the screenshot is
     what proves it, and it is how the Hangul gap was found in the first place.
 
+12. **The home directory had no folders, and several programs quietly depended
+    on ones that were missing.** Upstream's `user-dirs.dirs` sets only
+    `XDG_DESKTOP_DIR` and nothing ever creates the rest, so a fresh install has
+    a bare home. That is not just untidy:
+
+    - `mpd.conf` and `ncmpcpp/config` both point at `~/Music`, which did not
+      exist.
+    - `.config/shell/bm-dirs` — the source the `shortcuts` script compiles into
+      the shell `cd` bookmarks, the lf shortcuts and the nvim shortcuts — lists
+      `Documents`, `Downloads`, `Music`, `Pictures` and `Videos` as
+      `${XDG_*_DIR:-$HOME/Name}`. Every one of those jumped to a path that was
+      not there.
+    - `maimpick` hands `maim` a **bare relative filename**, so a screenshot
+      lands in the working directory of whatever launched dwm — `$HOME`, for a
+      startx login. `dmenurecord` does the same on purpose, with six hardcoded
+      `$HOME/` paths.
+
+    `user-dirs.dirs` now carries the full set. Capitalised, not voidrice's
+    lowercase `dl`/`mus`/`pix`, because bm-dirs and mpd already assume the
+    capitalised spellings; matching them means neither the shell nor GTK has to
+    source anything for the two to agree on where a directory is. `Templates`
+    and `PublicShare` are aimed at `.local/share` so they do not sit empty in
+    `~`. `maimpick` writes to `~/Pictures/screenshots`, `dmenurecord` to
+    `~/Videos/recordings` — the recordings directory takes the `audio` `.flac`
+    as well, because `~/Music` is an mpd library running with `auto_update`
+    on and voice memos would otherwise appear in ncmpcpp.
+
+    The `xdg-user-dirs` package is deliberately **not** installed. Its login
+    hook rewrites `user-dirs.dirs` and recreates any directory you delete,
+    which is exactly what a hand-written list exists to prevent.
+
+13. **Torrenting was unconnectable, and pointed at the wrong filesystem
+    layout.** Three faults, none of them visible from inside transmission.
+
+    **The peer port was blocked.** `transmission-remote -pt` reported `Port is
+    open: No`. Fedora runs firewalld, and its `public` zone allowed only
+    `dhcpv6-client mdns ssh`; Arch ships no firewall, so upstream never had to
+    open anything. Unconnectable does not halve your speed on a healthy swarm —
+    outbound dialling still works — but you can only reach peers who are
+    themselves reachable, two unconnectable peers never meet, and on a thin
+    torrent that can mean reaching nobody. `fedora.sh` now opens 51413 tcp
+    **and** udp; udp is not optional, µTP and DHT both need it.
+
+    Opening the host is only the half a script can do. On the machine this was
+    developed on the port test still said No afterwards, and `--log-level=debug`
+    said why:
+
+    ```
+    natpmp returned -7 (the gateway does not support nat-pmp); errno 111
+    UPNP_GetValidIGD failed ... If your router supports UPnP, please make
+      sure UPnP is enabled!
+    State changed from 'Starting' to 'Not forwarded'
+    ```
+
+    That is the router declining to forward, not the host blocking. Check those
+    three lines before believing any firewall change failed. `port-forwarding-
+    enabled` is left on anyway: it retries every 8 seconds, but the daemon only
+    lives while you are downloading — when the radio is awake regardless — and
+    leaving it on means the mapping starts working by itself the day UPnP is
+    turned on at the router.
+
+    **RPC listened on every interface with no password.** `rpc-bind-address`
+    defaults to `0.0.0.0` and `rpc-authentication-required` to false. The RPC
+    whitelist and firewalld both stood in front of it, so nothing was actually
+    exposed — but that is one `firewall-cmd --add-service=transmission-client`
+    away from an unauthenticated remote-control API on café wifi. Now bound to
+    `127.0.0.1`.
+
+    **Everything landed in `~/Downloads` on a copy-on-write filesystem.**
+    Torrents now go to `~/Downloads/torrents`, marked `chattr +C` while it is
+    still empty; the comment in `fedora.sh` covers why nodatacow matters here
+    and what it costs. Sharing a directory with browser downloads is a separate
+    trap: transmission seeds out of wherever it wrote, so emptying your
+    downloads folder pulls files out from under a running daemon.
+
+    Three settings changed for a laptop rather than a seedbox. `lpd-enabled`
+    off — Local Peer Discovery multicasts "I am torrenting" onto every network
+    the machine joins and finds nothing that is not already a seeded LAN.
+    `idle-seeding-limit-enabled` and `ratio-limit-enabled` on, at the 30
+    minutes and 2.0 that were already sitting in the file unused: give back
+    twice over, then stop, rather than holding the radio open for a swarm
+    nobody is pulling from.
+
+    Peer limits were deliberately **left** at 200 global / 50 per torrent.
+    Cutting them looks like the efficient choice and is not — a download that
+    takes twice as long keeps the radio and the daemon alive twice as long.
+    Race to idle. The real saving is that the daemon does not autostart at all:
+    `transadd`, `td-toggle` and the magnet handler each bring it up on demand,
+    and `xprofile` deliberately does not list it.
+
 Not fixed, and deliberately so: the fingerprint reader. The T480s ships a
 Synaptics `06cb:009a`, and `libfprint` 1.94 does not support it — its
 compiled device table carries 33 Synaptics IDs from `0x00bd` to `0x01a4`, and
@@ -648,6 +738,42 @@ tar caf ~/dotfiles-backup-$(date +%F).tar.gz ~/.config ~/.local/bin
   `~/.local/share/larbs/chars/emoji`. If your country's spelling differs there,
   the flag is blank. This replaced `geoiplookup`, whose Fedora data has been
   frozen since 2018 and would have answered confidently and wrongly.
+- **mpd cannot start as a session daemon under SELinux, and fails silently.**
+  Diagnosed, not yet fixed. `/usr/bin/mpd` is labelled `mpd_exec_t`, so running
+  it from `xprofile` makes `unconfined_t` transition into `mpd_t` — a domain
+  written for a *system* mpd serving `/var/lib/mpd`. That domain cannot read
+  `~/.config/mpd/mpd.conf`, so mpd silently falls back to `/etc/mpd.conf`, then
+  dies trying to `setgid` to the packaged `mpd` group, which a normal user may
+  not do. Nothing is logged where anyone would look: `pidof mpd` is simply
+  empty, and `mpc` and ncmpcpp report a refused connection as though the daemon
+  were merely off. This affects **every** install of this port; mpd has never
+  run on one.
+
+  ```sh
+  ausearch -m avc -ts recent | grep mpd     # denials on config_home_t
+  mpd --no-daemon --stderr ~/.config/mpd/mpd.conf   # "Permission denied"
+  ```
+
+  `setsebool -P mpd_enable_homedirs on` is necessary but **not sufficient** —
+  it covers `user_home_t`, and `~/.config` is `config_home_t`, which it does
+  not. Past that, `mpd_t` still cannot reach pipewire's socket in
+  `/run/user/1000` (`user_tmp_t`), so audio output would fail even with the
+  config read. Chasing it with relabels means fixing three types.
+
+  The fix that matches how this desktop actually works is to stop the domain
+  transition, so mpd runs as `unconfined_t` like mpv, ncmpcpp, st and every
+  other program here:
+
+  ```sh
+  sudo semanage fcontext -a -t bin_t /usr/bin/mpd
+  sudo restorecon -v /usr/bin/mpd
+  ```
+
+  This gives up SELinux confinement on mpd. That confinement was designed for a
+  network-facing system service, and here it buys nothing that dwm and Zen do
+  not already do without — but it is a real policy change on an enforcing
+  system, so it is written down rather than run by `fedora.sh`.
+
 - **`sent` and `pass` are not installed.** `compiler`, `opout` and `otp`
   reference them; those code paths are guarded by `ifinstalled` and simply do
   nothing. Add them to `progs.csv` if you want them.

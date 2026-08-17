@@ -966,6 +966,77 @@ vimplugininstall
 sudo -u "$name" -H mkdir -p "/home/$name/.cache/zsh" \
 	"/home/$name/.config/mpd/playlists" "/home/$name/.local/share/mpd"
 
+# The XDG user directories. Upstream's user-dirs.dirs lists only
+# XDG_DESKTOP_DIR and nothing creates the rest, so mpd's music_directory, the
+# bm-dirs shell bookmarks (m, pp, vv, d, D) and every GTK file dialog all point
+# at directories that do not exist. Made here rather than by installing
+# xdg-user-dirs: that package's login hook rewrites user-dirs.dirs and
+# recreates any directory you delete, which defeats a hand-written list.
+# Templates and Public are pointed into .local/share by the dotfiles so they do
+# not sit empty in the home directory; they still have to exist.
+sudo -u "$name" -H mkdir -p "/home/$name/Documents" "/home/$name/Downloads" \
+	"/home/$name/Music" "/home/$name/Pictures/screenshots" \
+	"/home/$name/Videos/recordings" "/home/$name/.local/share/Templates" \
+	"/home/$name/.local/share/Public"
+
+# Torrents get their own directory rather than sharing ~/Downloads.
+# transmission keeps seeding out of wherever it wrote, so the folder a browser
+# dumps into -- the one you empty without thinking -- is the wrong home for
+# files another process still holds open.
+#
+# On btrfs it is marked nodatacow first. Torrent writes land out of order in
+# preallocated files, the worst case for copy-on-write: one large download can
+# finish in tens of thousands of extents and never gets better. chattr +C
+# governs only files created after it is set, so an empty directory is the one
+# chance to do it. It also turns off this port's zstd compression for that
+# tree, which is spent CPU on media that is already compressed. The cost is
+# that those files lose their checksums -- btrfs can no longer tell you if one
+# has rotted, which for re-downloadable data is the right side of the trade.
+tordir="/home/$name/Downloads/torrents"
+sudo -u "$name" -H mkdir -p "$tordir"
+[ "$(stat -f -c %T "/home/$name")" = "btrfs" ] &&
+	chattr +C "$tordir" >>"$logfile" 2>&1
+sudo -u "$name" -H mkdir -p "$tordir/.incomplete"
+
+# transmission-daemon generates settings.json on first run and rewrites the
+# whole file every time it exits, so this cannot be shipped in the dotfiles
+# repo -- and should not be, because the generated file carries the RPC
+# password hash. Seed only the keys this port has an opinion about; the daemon
+# fills in defaults for everything else. The paths need the real user name,
+# which is the other reason this is written here rather than in fedorice.
+tdconf="/home/$name/.config/transmission-daemon"
+sudo -u "$name" -H mkdir -p "$tdconf"
+[ -f "$tdconf/settings.json" ] ||
+	sudo -u "$name" -H tee "$tdconf/settings.json" >/dev/null <<-EOF
+	{
+	    "download-dir": "$tordir",
+	    "incomplete-dir": "$tordir/.incomplete",
+	    "incomplete-dir-enabled": true,
+	    "rpc-bind-address": "127.0.0.1",
+	    "lpd-enabled": false,
+	    "idle-seeding-limit-enabled": true,
+	    "ratio-limit-enabled": true,
+	    "encryption": 2,
+	    "umask": "077"
+	}
+	EOF
+
+# BitTorrent needs a reachable inbound port. Without one the client is
+# "unconnectable": it can still dial out, but it can only ever talk to peers
+# that are themselves reachable, and two unconnectable peers never meet. On a
+# well seeded torrent that is a slow start; on a thin one it can mean reaching
+# nobody. Fedora runs firewalld by default and blocks the port, and Arch ships
+# no firewall at all, which is why upstream LARBS never had to think about it.
+#
+# This opens the host only. A router that speaks neither UPnP nor NAT-PMP still
+# has to be told by hand, and transmission cannot do anything about that; see
+# RUNBOOK 6.12 for how to tell whether yours is the problem.
+if systemctl is-enabled firewalld >/dev/null 2>&1; then
+	firewall-cmd --permanent --add-port=51413/tcp >>"$logfile" 2>&1
+	firewall-cmd --permanent --add-port=51413/udp >>"$logfile" 2>&1
+	firewall-cmd --reload >>"$logfile" 2>&1
+fi
+
 # chsh lives in util-linux-user, which is not in @core, so upstream's chsh call
 # would silently do nothing here.
 usermod -s /bin/zsh "$name" >>"$logfile" 2>&1

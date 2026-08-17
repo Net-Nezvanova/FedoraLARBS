@@ -108,6 +108,9 @@ exposes:
 | `Mod+F1` silently did nothing | Fedora splits `gropdf` into `groff-perl` |
 | Everything tiny on a laptop panel | DPI pinned at 96, and upstream's fonts mix `size=` with `pixelsize=` so it cannot just be raised |
 | Korean tofu, Chinese and Japanese fine | no CJK font installed at all; the accidental dependency covering Han and kana has no Hangul |
+| A bare home directory, screenshots landing in it | nothing ever created the XDG folders, and `maimpick` passes `maim` a relative filename |
+| Torrents crawl; `transmission-remote -pt` says the port is shut | firewalld blocks 51413, which Arch never had to open |
+| `mpd` and `ncmpcpp` act as if the daemon is off | SELinux transitions mpd into a system-service domain that cannot read `~/.config` — see §11, not yet fixed |
 
 ---
 
