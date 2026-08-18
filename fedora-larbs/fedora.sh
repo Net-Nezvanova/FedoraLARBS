@@ -438,6 +438,14 @@ patchsource() {
 		# neomutt and newsboat.
 		sed -i 's/sb-pacpackages/sb-dnfpackages/g' config.h
 		sed -i '/sb-mailbox/d;/sb-news/d' config.h
+		# Hand the ❓ slot to the Tailscale indicator. The help icon duplicated two
+		# things that already exist: Mod+F1 runs the same groff|zathura command its
+		# left click ran, and sysact's "renew" sends the same kill -HUP its middle
+		# click sent. That made it the cheapest slot to give to an indicator with no
+		# keybinding of its own. Polled at 30s rather than signal-only because a
+		# wifi change can wedge tailscale0 with nothing to signal the bar about it;
+		# see RUNBOOK 6.15.
+		sed -i '/sb-help-icon/s%.*%\t{"",\t"sb-tailscale",\t30,\t15},%' config.h
 		;;
 	esac
 }

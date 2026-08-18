@@ -89,6 +89,7 @@
 ,NetworkManager-tui,"is the terminal network manager, opened from the status bar."
 ,iw,"reports wifi signal strength for the status bar. sb-internet reads it through nl80211, because the /proc/net/wireless file upstream parses belongs to the removed Wireless Extensions API and does not exist on a current kernel. Without this the wifi indicator is blank and the bar looks offline while connected."
 ,bluez,"is the Bluetooth stack, and provides the bluetoothctl that dmenubluetooth (super+shift+b) drives. A Fedora minimal install does not pull it in, so without this line the Bluetooth menu has nothing to talk to."
+,tailscale,"is the mesh VPN that the 🔗 bar module and dmenutailscale drive. Fedora's own package, not pkgs.tailscale.com: it tracks upstream closely and an extra repo would be refreshed on every dnf run for one program. Fedora's preset is `disable *` with no override for it, so installing the package costs nothing until dmenutailscale is used to start the daemon."
 ,dosfstools,"provides FAT filesystem tools for USB drives."
 ,exfatprogs,"provides exFAT support for large USB drives."
 ,ntfs-3g,"allows reading and writing NTFS partitions."

@@ -639,6 +639,51 @@ is no fork to hold them; script and config changes are in the dotfiles repo.
     `$XDG_CACHE_HOME/mpd/db` and does not create the parent, so it starts,
     listens, and throws `Failed to open .../db` at the first update.
 
+15. **Tailscale had no presence in the bar, and the slot it now uses held a
+    button that did nothing new.** The package comes from Fedora's own repo
+    rather than `pkgs.tailscale.com`; it tracks upstream closely, and the
+    alternative is a second repo refreshed on every `dnf` call plus a second
+    GPG key, for one program. `tailscale up --operator=$USER` is what lets
+    `tailscale set` run from a dmenu script without a password prompt on every
+    toggle.
+
+    The indicator replaced `sb-help-icon`, which was pure duplication: its left
+    click ran the same `groff -mom /usr/local/share/dwm/larbs.mom -Tpdf |
+    zathura -` that `Mod+F1` is bound to, and its middle click sent the same
+    `kill -HUP` that sysact's "♻️ renew" sends. Both survive the swap.
+
+    `sb-tailscale` reads routing table 52 — the table tailscaled installs into —
+    and never calls the tailscale CLI. The CLI is a round trip to the daemon
+    over its unix socket at ~15ms against ~3ms for one netlink read, which
+    matters for something the bar runs on a timer. Empty table means no routes
+    installed, `default dev tailscale0` means an exit node is selected, and
+    anything else means the tailnet is up with traffic exiting locally.
+    `dmenutailscale` parses plain `tailscale status`, not `--json`, because `jq`
+    is not in `progs.csv` and is present only as another package's transitive
+    dependency.
+
+    Two things to know about the result. **A wifi change can wedge the
+    interface**: moving between networks produced `wg: Failed to write packets
+    to TUN device: write /dev/net/tun: input/output error`, after which
+    `tailscale0` sat admin-down with no addresses while `tailscale status` still
+    reported `Running` and `tailscale ping` still answered — the ping is a
+    userspace disco probe inside tailscaled and does not touch the interface, so
+    it is not a test of anything. `tailscale down && tailscale up` does not
+    clear it; `systemctl restart tailscaled` does. This is why the module polls
+    at 30s instead of running on signal alone: nothing would signal the bar
+    about a fault it did not cause, and an empty table 52 renders it as 🔌.
+
+    **`tailscale0` is in no firewalld zone**, so it falls to the default
+    `public` zone and inbound tailnet traffic reaches only what that zone
+    allows. Peer connectivity is unaffected — WireGuard hole-punching is
+    outbound from both ends and conntrack passes the return path — but a
+    service hosted here is unreachable from the tailnet unless its port is
+    open. `firewall-cmd --permanent --zone=trusted --add-interface=tailscale0`
+    is the fix, and is left undone deliberately: it exposes every listening
+    port on this machine to every device on the tailnet, backed by Tailscale's
+    ACLs rather than the host firewall. That is the intended trust model, but
+    it is a posture change and not an installation detail.
+
 Not fixed, and deliberately so: the fingerprint reader. The T480s ships a
 Synaptics `06cb:009a`, and `libfprint` 1.94 does not support it — its
 compiled device table carries 33 Synaptics IDs from `0x00bd` to `0x01a4`, and

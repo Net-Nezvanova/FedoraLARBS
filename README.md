@@ -111,6 +111,7 @@ exposes:
 | A bare home directory, screenshots landing in it | nothing ever created the XDG folders, and `maimpick` passes `maim` a relative filename |
 | Torrents crawl; `transmission-remote -pt` says the port is shut | firewalld blocks 51413, which Arch never had to open |
 | `mpd` and `ncmpcpp` act as if the daemon is off | SELinux transitioned mpd into a system-service domain that cannot read `~/.config`, so it read `/etc/mpd.conf` and died silently |
+| Tailscale peers unreachable after changing wifi, yet `tailscale status` says `Running` | the link change wedged the TUN handle; `tailscale0` is admin-down while the daemon is fine. `tailscale up` will not clear it, `systemctl restart tailscaled` will |
 
 ---
 
