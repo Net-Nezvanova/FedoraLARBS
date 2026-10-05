@@ -893,6 +893,44 @@ systemdsetup() {
 	return 0
 }
 
+powersetup() {
+	whiptail --infobox "Configuring power..." 7 40
+	logmsg "power"
+	# ThinkPad charge thresholds, through the sysfs knobs thinkpad_acpi exposes;
+	# no TLP, no daemon. A cell held at 100% and warm ages fastest of all, and a
+	# laptop that lives on the charger is held exactly there. 80% is the usual
+	# compromise; 75% as the start keeps the firmware from topping up on every
+	# brief unplug. The unit is a oneshot that exits, which is the whole point:
+	# the EC enforces the thresholds, nothing needs to stay resident. Start is
+	# written before end because the firmware rejects a start above the end,
+	# and the shipped end is 100. ConditionPathExists lets this enable cleanly
+	# on a VM or desktop, where it simply does not run.
+	cat >/etc/systemd/system/larbs-battery-threshold.service <<-'UNIT'
+		[Unit]
+		Description=Hold the battery between 75%% and 80%% while on mains
+		ConditionPathExists=/sys/class/power_supply/BAT0/charge_control_end_threshold
+
+		[Service]
+		Type=oneshot
+		ExecStart=/bin/sh -c 'echo 75 >/sys/class/power_supply/BAT0/charge_control_start_threshold && echo 80 >/sys/class/power_supply/BAT0/charge_control_end_threshold'
+
+		[Install]
+		WantedBy=multi-user.target
+	UNIT
+	systemctl enable larbs-battery-threshold.service >>"$logfile" 2>&1
+	# Closing the lid on mains keeps the machine up, so it can be reached over
+	# the tailnet from elsewhere. On battery the default still suspends, so a
+	# closed laptop in a bag does not cook itself. This does not turn the panel
+	# off -- nothing in X reacts to the lid -- so blank it first (sysact ->
+	# display off) or let an idle timeout do it.
+	mkdir -p /etc/systemd/logind.conf.d
+	cat >/etc/systemd/logind.conf.d/larbs-lid.conf <<-'LID'
+		[Login]
+		HandleLidSwitchExternalPower=ignore
+	LID
+	return 0
+}
+
 installationloop() {
 	tmpprogs="$(mktemp)"
 	readprogs "$tmpprogs"
@@ -1132,6 +1170,7 @@ mkdir -p /etc/sysctl.d
 printf "kernel.dmesg_restrict = 0\\n" >/etc/sysctl.d/99-larbs-dmesg.conf
 sysctl --system >>"$logfile" 2>&1
 
+powersetup
 systemdsetup
 relabel
 

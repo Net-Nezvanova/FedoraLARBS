@@ -684,6 +684,30 @@ is no fork to hold them; script and config changes are in the dotfiles repo.
     ACLs rather than the host firewall. That is the intended trust model, but
     it is a posture change and not an installation detail.
 
+16. **The battery was held at 100% whenever the laptop was on mains, and the
+    lid suspended it.** Both are the kernel's and logind's defaults, and both
+    are wrong for a laptop that is meant to sit closed on a desk and be reached
+    over the tailnet. The pack on the T480s this was found on had lost 21% of
+    its design capacity after 59 cycles -- calendar aging from sitting full,
+    not wear from use.
+
+    `powersetup()` writes two files. `larbs-battery-threshold.service` is a
+    oneshot that sets `charge_control_start_threshold` to 75 and
+    `charge_control_end_threshold` to 80 through thinkpad_acpi; the EC holds
+    the limit from there, so nothing stays resident and TLP is not needed. It
+    carries a `ConditionPathExists` so it enables on any machine and runs only
+    where the knobs exist. `logind.conf.d/larbs-lid.conf` sets
+    `HandleLidSwitchExternalPower=ignore`, which is narrower than
+    `HandleLidSwitch`: closed on mains stays up, closed on battery still
+    suspends.
+
+    Two things to know. **The panel does not go dark when the lid closes.**
+    Nothing in X reacts to the lid, so the backlight stays lit under it; use
+    `sysact -> display off` before closing, or give `xset dpms` a timeout.
+    **To charge to 100% for one long day**, write it to the end threshold --
+    `echo 100 | sudo tee /sys/class/power_supply/BAT0/charge_control_end_threshold`
+    -- and the unit puts 80 back on the next boot.
+
 Not fixed, and deliberately so: the fingerprint reader. The T480s ships a
 Synaptics `06cb:009a`, and `libfprint` 1.94 does not support it — its
 compiled device table carries 33 Synaptics IDs from `0x00bd` to `0x01a4`, and
