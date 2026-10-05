@@ -918,16 +918,6 @@ powersetup() {
 		WantedBy=multi-user.target
 	UNIT
 	systemctl enable larbs-battery-threshold.service >>"$logfile" 2>&1
-	# Closing the lid on mains keeps the machine up, so it can be reached over
-	# the tailnet from elsewhere. On battery the default still suspends, so a
-	# closed laptop in a bag does not cook itself. This does not turn the panel
-	# off -- nothing in X reacts to the lid -- so blank it first (sysact ->
-	# display off) or let an idle timeout do it.
-	mkdir -p /etc/systemd/logind.conf.d
-	cat >/etc/systemd/logind.conf.d/larbs-lid.conf <<-'LID'
-		[Login]
-		HandleLidSwitchExternalPower=ignore
-	LID
 	return 0
 }
 
