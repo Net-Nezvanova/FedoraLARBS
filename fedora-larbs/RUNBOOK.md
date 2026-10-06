@@ -712,9 +712,38 @@ is no fork to hold them; script and config changes are in the dotfiles repo.
     rather than a switch -- and because an inhibitor dies with the session, so
     it cannot be forgotten on. Two things to know: **the panel does not go dark
     when the lid closes** -- nothing in X reacts to the lid, so blank it with
-    `sysact -> display off` first or the backlight stays lit all day -- and
-    releasing the inhibitor while the lid is already closed does not suspend;
-    logind acts on the next close.
+    `sysact -> display off` first or wait for the ten-minute idle blank that
+    xprofile pins with `xset s 600 600 dpms 600 600 600` (the X server's own
+    defaults, written down so they are on record) -- and releasing the
+    inhibitor while the lid is already closed does not suspend; logind acts on
+    the next close.
+
+17. **Reaching the closed laptop from a phone.** Two routes, both over the
+    tailnet, neither needing a port opened or a key copied.
+
+    *Remote Control* is Claude Code's own: `/remote-control` inside a session
+    started on the laptop, then the Claude app's Code tab on the phone. It is
+    outbound HTTPS only and needs a claude.ai login rather than an API key. The
+    interactive form retries indefinitely; the standalone `claude
+    remote-control` server gives up after about ten minutes of outage, so start
+    it from a session you leave open in st, not from the server command.
+
+    *Tailscale SSH* is the fallback and the general-purpose shell:
+    `tailscale set --ssh` on the laptop, then `ssh marina@fedora` from Termux
+    on the phone. Authentication is the tailnet identity -- the default policy
+    allows a member into their own devices in `check` mode, which asks for a
+    browser re-auth every so often -- so there is no key on the phone and no
+    `authorized_keys` here. tailscaled answers port 22 on the tailnet address
+    itself, before the packet reaches the kernel, so sshd and firewalld are not
+    involved; sshd keeps serving the LAN as before. Two consequences. **It
+    cannot be tested from the laptop itself**: a connection to your own
+    tailnet address is delivered locally and reaches sshd, which refuses it --
+    test from another node. And `claude` over SSH goes inside `tmux new -A -s
+    claude`, so a dropped 4G link does not take the session with it;
+    `claude --continue` picks the laptop's last session back up.
+
+    The before-leaving routine is: plug in, start the session, `/remote-control`,
+    `sysact -> sleepless lid: on`, close the lid.
 
 Not fixed, and deliberately so: the fingerprint reader. The T480s ships a
 Synaptics `06cb:009a`, and `libfprint` 1.94 does not support it — its
