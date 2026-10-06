@@ -837,6 +837,16 @@ boot with `systemd.unit=rescue.target` and remove the file in
 often disable weak deps. They are explicit rows in `progs.csv` for this reason;
 confirm with `rpm -q xorg-x11-drv-libinput`.
 
+**Keyboard and mouse die mid-session after `systemctl restart systemd-logind`.**
+Never restart logind under a running X session. Rootless Xorg holds its input
+and DRM devices through logind's session control, and a restart severs it:
+`Xorg.0.log` fills with `systemd-logind: You are not in control of this
+session`, the devices are never resumed, and nothing on the console answers --
+not X, and not a getty you cannot type into. The only way out is the power
+button, which still does a clean poweroff through logind. A change under
+`/etc/systemd/logind.conf.d/` therefore waits for a reboot; the file is picked
+up then and nothing is lost by waiting.
+
 **Notifications intermittent, keyring prompts never appear.** A second D-Bus
 session bus. Check `echo $DBUS_SESSION_BUS_ADDRESS` points into
 `$XDG_RUNTIME_DIR`, and that nothing reintroduced `dbus-launch` into
