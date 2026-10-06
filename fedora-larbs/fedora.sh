@@ -36,6 +36,7 @@ logfile="/var/log/fedora-larbs.log"
 ueberzugpprepo="https://github.com/jstkdng/ueberzugpp.git"
 ueberzugpptag="v2.9.6"
 lfrepo="https://github.com/gokcehan/lf.git"
+tremcrepo="https://github.com/tremc/tremc.git"
 arkenfoxurl="https://raw.githubusercontent.com/arkenfox/user.js/master/user.js"
 
 # Needed before progs.csv can be processed at all. Kept here rather than in the
@@ -221,7 +222,7 @@ resolve() {
 	done
 
 	printf "\\nSource repositories:\\n"
-	for u in "$lfrepo" "$ueberzugpprepo" "$dotfilesrepo"; do
+	for u in "$lfrepo" "$tremcrepo" "$ueberzugpprepo" "$dotfilesrepo"; do
 		[ -n "$u" ] || continue
 		if [ "$havegit" -eq 0 ]; then
 			printf "  skip  git     %s\\n" "$u"
@@ -523,6 +524,19 @@ build_lf() {
 		sh -c "cd '$dir' && go build -o lf" >>"$logfile" 2>&1 || return 1
 	install -Dm755 "$dir/lf" /usr/local/bin/lf || return 1
 	[ -f "$dir/lf.1" ] && install -Dm644 "$dir/lf.1" /usr/local/share/man/man1/lf.1
+	relabel
+}
+
+# tremc is one Python file on the standard library, so nothing is compiled.
+# It is a recipe and not a G row because its Makefile has install as the only
+# target and no default PREFIX: gitmakeinstall's bare `make` as the user would
+# try to write into /bin.
+build_tremc() {
+	dir="$repodir/tremc"
+	rm -rf "$dir"
+	sudo -u "$name" -H git -C "$repodir" clone --depth 1 --single-branch \
+		--no-tags -q "$tremcrepo" "$dir" >>"$logfile" 2>&1 || return 1
+	make -C "$dir" install PREFIX=/usr/local >>"$logfile" 2>&1 || return 1
 	relabel
 }
 

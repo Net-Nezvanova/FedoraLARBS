@@ -745,6 +745,19 @@ is no fork to hold them; script and config changes are in the dotfiles repo.
     The before-leaving routine is: plug in, start the session, `/remote-control`,
     `sysact -> sleepless lid: on`, close the lid.
 
+18. **The torrent window was a picture of a list.** Upstream opens a torrent
+    client from Mod+F6 and from the bar module. Neither tremc nor stig is
+    packaged for Fedora, and the first port substituted `watch -n 5
+    transmission-remote -l`. That prints one screen and stops: `watch` cuts
+    every line at the terminal width and every row past the bottom, and takes
+    no input, so a long name or a fourteenth torrent is unreadable and nothing
+    can be paused or opened. `fedora.sh` now installs **tremc** from its git
+    repository into `/usr/local` (`build_tremc`), and `torwrap` and
+    `sb-torrent` open it. tremc over stig because it is a single file on
+    Python's standard library, with no pipx environment behind it. Keys:
+    arrows to move, `p` pause or resume, Enter for one torrent's files, peers
+    and trackers, `?` for the rest.
+
 Not fixed, and deliberately so: the fingerprint reader. The T480s ships a
 Synaptics `06cb:009a`, and `libfprint` 1.94 does not support it — its
 compiled device table carries 33 Synaptics IDs from `0x00bd` to `0x01a4`, and
