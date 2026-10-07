@@ -758,6 +758,27 @@ is no fork to hold them; script and config changes are in the dotfiles repo.
     arrows to move, `p` pause or resume, Enter for one torrent's files, peers
     and trackers, `?` for the rest.
 
+19. **One torrent filled the disk while downloading 7 GB of it.** A Redump
+    collection torrent is 17 TB in 2800 files, and transmission starts every
+    file the moment a torrent is added. Unticking all but one in the client
+    takes a minute, and in that minute pieces arrive for files at random.
+    With `preallocation` at its default of 1 ("fast", `fallocate`), the first
+    piece that lands in a file reserves the file's full size on disk, and
+    unticking the file afterwards frees nothing: `~/Downloads/torrents/
+    .incomplete` held twenty-five 6 to 7 GB zips at 0%, 150 GB, until the
+    wanted file stopped at 85% with `Unable to save resume file: No space left
+    on device`. Pieces written to a full disk were also corrupt, so a verify
+    (`transmission-remote -t N -v`) was needed before it could finish.
+
+    `fedora.sh` now seeds two more keys. `start-added-torrents` false: every
+    torrent, by file or magnet, lands paused, and the routine is Enter on it in
+    tremc, untick, `p` to start. A magnet has no file list until its metadata
+    arrives, which transmission fetches while paused; wait for the file count.
+    `preallocation` 0: files are sparse, so a stray piece costs one piece. The
+    fragmentation that preallocation exists to avoid is a seedbox concern, and
+    the torrent directory is already nodatacow on btrfs. Deleting an unticked
+    `.part` file is always safe; the torrent re-creates it if a piece arrives.
+
 Not fixed, and deliberately so: the fingerprint reader. The T480s ships a
 Synaptics `06cb:009a`, and `libfprint` 1.94 does not support it — its
 compiled device table carries 33 Synaptics IDs from `0x00bd` to `0x01a4`, and

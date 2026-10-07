@@ -1062,8 +1062,8 @@ sudo -u "$name" -H mkdir -p "/home/$name/Documents" "/home/$name/Downloads" \
 # dumps into -- the one you empty without thinking -- is the wrong home for
 # files another process still holds open.
 #
-# On btrfs it is marked nodatacow first. Torrent writes land out of order in
-# preallocated files, the worst case for copy-on-write: one large download can
+# On btrfs it is marked nodatacow first. Torrent writes land out of order
+# inside large files, the worst case for copy-on-write: one large download can
 # finish in tens of thousands of extents and never gets better. chattr +C
 # governs only files created after it is set, so an empty directory is the one
 # chance to do it. It also turns off this port's zstd compression for that
@@ -1082,6 +1082,14 @@ sudo -u "$name" -H mkdir -p "$tordir/.incomplete"
 # password hash. Seed only the keys this port has an opinion about; the daemon
 # fills in defaults for everything else. The paths need the real user name,
 # which is the other reason this is written here rather than in fedorice.
+#
+# start-added-torrents off and preallocation off are one fix seen from two
+# sides. A collection torrent (a Redump set is 17 TB in 2800 files) starts
+# pulling every file the moment it is added, and with preallocation on, the
+# first stray piece that lands in a file reserves that file's full size on
+# disk; unticking it afterwards frees nothing. That filled a 236 GB disk with
+# twenty-five 7 GB zips at 0%. Now a torrent sits paused until its files are
+# chosen, and a stray piece costs one piece, not one ISO.
 tdconf="/home/$name/.config/transmission-daemon"
 sudo -u "$name" -H mkdir -p "$tdconf"
 [ -f "$tdconf/settings.json" ] ||
@@ -1090,6 +1098,8 @@ sudo -u "$name" -H mkdir -p "$tdconf"
 	    "download-dir": "$tordir",
 	    "incomplete-dir": "$tordir/.incomplete",
 	    "incomplete-dir-enabled": true,
+	    "start-added-torrents": false,
+	    "preallocation": 0,
 	    "rpc-bind-address": "127.0.0.1",
 	    "lpd-enabled": false,
 	    "idle-seeding-limit-enabled": true,
